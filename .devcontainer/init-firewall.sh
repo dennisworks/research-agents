@@ -35,10 +35,10 @@ ALLOWED_DOMAINS=(
   objects.githubusercontent.com
   raw.githubusercontent.com
   # --- add project-specific hosts below ---
+  pypi.org                    # Python deps (uv sync)
+  api.tavily.com              # Tavily search/extract API
   # binaries.prisma.sh        # Prisma engines
   # checkpoint.prisma.io
-  # pypi.org                  # Python
-  # files.pythonhosted.org
   # crates.io                 # Rust
   # static.crates.io
   # proxy.golang.org          # Go
@@ -54,9 +54,16 @@ ALLOWED_DOMAINS=(
 # either (a) re-resolving constantly, or (b) a DNS-aware egress proxy, both
 # of which are heavier than the threat model warrants for local dev.
 ALLOWED_DOMAINS_WIDE=(
+  files.pythonhosted.org      # PyPI wheel CDN (Fastly, rotating edge IPs)
   # mcp.vercel.com            # Vercel MCP server (Claude Code vercel-plugin)
   # vercel.com                # Vercel OAuth (authorize + token exchange during MCP login)
   # api.vercel.com            # Vercel REST API (read by MCP server + some plugin commands)
+)
+
+# Raw IPs that don't resolve via DNS — the dworks VPS over Tailscale, so the
+# agent can POST drafts to /api/research/ingest from inside the sandbox.
+ALLOWED_IPS=(
+  100.93.140.39               # dworks VPS (Tailscale)
 )
 
 # --- Wait for eth0 to attach ----------------------------------------------
@@ -164,6 +171,13 @@ for domain in "${ALLOWED_DOMAINS_WIDE[@]:-}"; do
     ipset add allowed-domains "$cidr" 2>/dev/null || true
   done
   log "allowed $domain (with /24 prefix)"
+done
+
+# Raw IP entries (no DNS resolution needed).
+for ip in "${ALLOWED_IPS[@]:-}"; do
+  [ -z "$ip" ] && continue
+  ipset add allowed-domains "$ip" 2>/dev/null || true
+  log "allowed $ip (raw IP)"
 done
 
 iptables -A OUTPUT -m set --match-set allowed-domains dst -j ACCEPT

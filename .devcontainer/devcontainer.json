@@ -34,11 +34,8 @@
 		"ghcr.io/devcontainer-config/features/dot-config:4": {}
 	},
 
-	// Install Claude Code on first create. Append your project's install step
-	// after `&&` — for example:
-	//   "npm install && npm install -g @anthropic-ai/claude-code"
-	//   "pip install -r requirements.txt && npm install -g @anthropic-ai/claude-code"
-	"postCreateCommand": "npm install -g @anthropic-ai/claude-code"
+	// Install Claude Code + sync Python deps on first create.
+	"postCreateCommand": "uv sync && npm install -g @anthropic-ai/claude-code"
 
 	// To auto-start a dev server on every container start, uncomment and adapt.
 	// Backgrounded with nohup so it doesn't block VS Code's connection.

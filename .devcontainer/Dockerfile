@@ -27,8 +27,16 @@ RUN apt-get update \
         iptables \
         ipset \
         openssl \
+        python3 \
+        python3-venv \
         wget \
     && rm -rf /var/lib/apt/lists/*
+
+# uv for Python dependency management (pinned binary from the official image).
+# UV_PYTHON_DOWNLOADS=never: use the system python3 above — managed-python
+# downloads would be blocked by the egress firewall at runtime anyway.
+COPY --from=ghcr.io/astral-sh/uv:0.7 /uv /uvx /usr/local/bin/
+ENV UV_PYTHON_DOWNLOADS=never
 
 # Egress allowlist firewall, run as root at container start (see the `command`
 # and cap_add in .devcontainer/docker-compose.yml). dnsutils/iptables/ipset above

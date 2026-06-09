@@ -1,4 +1,53 @@
-# secure-devcontainer
+# research-agents
+
+LangGraph + Tavily research agents that draft articles into the dworks
+editorial feed (`research_items` collection), where they're reviewed at
+`/admin/research` before publishing to the public JSON feed.
+
+## Pipeline
+
+```
+topics.yaml → ReAct agent (Claude Opus 4.8 + Tavily search) → structured Article
+            → POST dworks /api/research/ingest (bearer token) → status: draft
+            → editorial review in dworks /admin/research → publish
+            → GET /api/research/feed (consumed by the Next.js site on Vercel)
+```
+
+## Setup
+
+1. `cp .env.example .env` and fill in:
+   - `ANTHROPIC_API_KEY` — console.anthropic.com
+   - `TAVILY_API_KEY` — app.tavily.com (free tier: 1,000 credits/month)
+   - `DWORKS_INGEST_TOKEN` — must match `RESEARCH_INGEST_TOKEN` on the VPS
+2. Open in VS Code → **"Reopen in Container"** (not Attach). `uv sync` runs on create.
+3. Test without touching dworks:
+   ```
+   uv run python main.py --topic "anything interesting" --dry-run
+   ```
+
+## Running
+
+- `uv run python main.py` — all topics in `topics.yaml`, post drafts to dworks
+- `--topic "..."` — single ad-hoc topic
+- `--dry-run` — print article JSON to stdout instead of posting
+
+Add a research beat = add an entry to `topics.yaml`.
+
+## Production (VPS)
+
+Built with the root `Dockerfile`, run daily by cron:
+
+```
+docker run --rm --env-file /opt/research-agents/.env research-agents
+```
+
+The agents only need outbound HTTPS to `api.anthropic.com` and
+`api.tavily.com` — Tavily does all web crawling on its own infrastructure.
+
+---
+
+# Dev container (from secure-devcontainer template)
+
 
 A hardened [Dev Container](https://containers.dev) template for running
 [Claude Code](https://claude.com/claude-code) (or any AI coding agent) in

@@ -1,2 +1,8 @@
 .DS_Store
 *.local
+
+# Python
+.env
+.venv/
+__pycache__/
+*.pyc
