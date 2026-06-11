@@ -50,14 +50,21 @@ def research_topic(brief: str) -> str:
 
 
 def write_article(brief: str, notes: str) -> Article:
-    """Turn research notes into a structured Article."""
+    """Turn research notes into a structured Article.
+
+    Retried once: the structured-output call occasionally returns an
+    incomplete object (seen in production as Pydantic validation errors),
+    and a failed daily run means no article that day.
+    """
     writer = _make_llm().with_structured_output(Article)
-    return writer.invoke(
-        [
-            ("system", WRITER_PROMPT),
-            ("user", f"Editorial brief: {brief}\n\nResearch notes:\n\n{notes}"),
-        ]
-    )
+    messages = [
+        ("system", WRITER_PROMPT),
+        ("user", f"Editorial brief: {brief}\n\nResearch notes:\n\n{notes}"),
+    ]
+    try:
+        return writer.invoke(messages)
+    except Exception:
+        return writer.invoke(messages)
 
 
 def run(brief: str) -> Article:
