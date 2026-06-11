@@ -9,11 +9,15 @@ archived to prompts/used/ only after the run succeeds.
 """
 
 import argparse
+import os
 import sys
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
+from research_agents import remote_prompts
 from research_agents.agent import run
 from research_agents.ingest import DuplicateDraft, post_draft
 from research_agents.prompts import ResolvedPrompt, archive, resolve
@@ -34,16 +38,29 @@ def main() -> int:
     args = parser.parse_args()
 
     resolved: ResolvedPrompt | None = None
+    remote: remote_prompts.RemotePrompt | None = None
     if args.topic:
         brief, category = args.topic, None
         print(f"[prompt] ad-hoc --topic", file=sys.stderr)
     else:
-        resolved = resolve(Path(args.prompts_dir))
-        brief, category = resolved.text, resolved.category
-        print(
-            f"[prompt] {resolved.path} (category={category or '-'}, queued={resolved.from_queue})",
-            file=sys.stderr,
-        )
+        # The dworks queue (entered at /admin/research/prompts) wins;
+        # the local prompts/ directory is the offline fallback.
+        tz = ZoneInfo(os.environ.get("PROMPT_TZ", "UTC"))
+        today = datetime.now(tz).date().isoformat()
+        remote = remote_prompts.fetch(today)
+        if remote:
+            brief, category = remote.text, remote.category
+            print(
+                f"[prompt] dworks queue {remote.id} (category={category or '-'})",
+                file=sys.stderr,
+            )
+        else:
+            resolved = resolve(Path(args.prompts_dir))
+            brief, category = resolved.text, resolved.category
+            print(
+                f"[prompt] {resolved.path} (category={category or '-'}, queued={resolved.from_queue})",
+                file=sys.stderr,
+            )
 
     try:
         article = run(brief)
@@ -64,8 +81,11 @@ def main() -> int:
         print(f"[error] ingest failed for {article.slug}: {e}", file=sys.stderr)
         return 1
 
-    # Only a successful (or duplicate-skipped) run consumes a queue prompt.
-    if resolved and resolved.from_queue:
+    # Only a successful (or duplicate-skipped) run consumes a queued prompt.
+    if remote:
+        remote_prompts.consume(remote.id)
+        print(f"[prompt] consumed dworks prompt {remote.id}", file=sys.stderr)
+    elif resolved and resolved.from_queue:
         archived_to = archive(resolved)
         print(f"[prompt] archived {resolved.path.name} -> {archived_to}", file=sys.stderr)
 
