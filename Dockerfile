@@ -12,6 +12,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
 COPY research_agents/ research_agents/
-COPY main.py topics.yaml ./
+COPY prompts/ prompts/
+COPY main.py ./
 
 ENTRYPOINT ["uv", "run", "--no-sync", "python", "main.py"]

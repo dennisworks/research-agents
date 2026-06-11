@@ -7,7 +7,7 @@ editorial feed (`research_items` collection), where they're reviewed at
 ## Pipeline
 
 ```
-topics.yaml → ReAct agent (Claude Opus 4.8 + Tavily search) → structured Article
+prompts/ (dated → queue → default) → ReAct agent (Claude Opus 4.8 + Tavily search) → structured Article
             → POST dworks /api/research/ingest (bearer token) → status: draft
             → editorial review in dworks /admin/research → publish
             → GET /api/research/feed (consumed by the Next.js site on Vercel)
@@ -27,11 +27,13 @@ topics.yaml → ReAct agent (Claude Opus 4.8 + Tavily search) → structured Art
 
 ## Running
 
-- `uv run python main.py` — all topics in `topics.yaml`, post drafts to dworks
-- `--topic "..."` — single ad-hoc topic
+- `uv run python main.py` — daily mode: resolves the prompt (dated file → queue → default), posts the draft to dworks
+- `--topic "..."` — single ad-hoc topic, skips prompt resolution
 - `--dry-run` — print article JSON to stdout instead of posting
 
-Add a research beat = add an entry to `topics.yaml`.
+Set tomorrow's prompt = add a file under `prompts/` and push (see
+`prompts/README.md` for the resolution rules, frontmatter `category:`, and
+the one-shot queue).
 
 ## Production (VPS)
 

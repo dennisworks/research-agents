@@ -6,3 +6,6 @@
 .venv/
 __pycache__/
 *.pyc
+
+# consumed queue prompts are archived per-machine, not tracked
+prompts/used/

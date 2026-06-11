@@ -1,7 +1,0 @@
-# Research beats. Each entry becomes one article per run.
-# `focus` is optional editorial guidance passed to the agent.
-topics:
-  - name: "AI agent frameworks and tooling"
-    focus: "New releases, notable updates, and adoption trends in open-source agent tooling this week"
-  - name: "Self-hosting and homelab software"
-    focus: "Interesting new self-hostable projects and major version releases"

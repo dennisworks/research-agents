@@ -39,28 +39,27 @@ def _text_of(content) -> str:
     )
 
 
-def research_topic(topic: str, focus: str | None = None) -> str:
-    """Run the search agent and return free-form research notes."""
+def research_topic(brief: str) -> str:
+    """Run the search agent against an editorial brief; return research notes."""
     search = TavilySearch(max_results=5)
     agent = create_agent(_make_llm(), [search], system_prompt=RESEARCH_PROMPT)
-    ask = f"Research this topic: {topic}"
-    if focus:
-        ask += f"\nEditorial focus: {focus}"
-    result = agent.invoke({"messages": [("user", ask)]})
+    result = agent.invoke(
+        {"messages": [("user", f"Research the following editorial brief:\n\n{brief}")]}
+    )
     return _text_of(result["messages"][-1].content)
 
 
-def write_article(topic: str, notes: str) -> Article:
+def write_article(brief: str, notes: str) -> Article:
     """Turn research notes into a structured Article."""
     writer = _make_llm().with_structured_output(Article)
     return writer.invoke(
         [
             ("system", WRITER_PROMPT),
-            ("user", f"Topic: {topic}\n\nResearch notes:\n\n{notes}"),
+            ("user", f"Editorial brief: {brief}\n\nResearch notes:\n\n{notes}"),
         ]
     )
 
 
-def run(topic: str, focus: str | None = None) -> Article:
-    notes = research_topic(topic, focus)
-    return write_article(topic, notes)
+def run(brief: str) -> Article:
+    notes = research_topic(brief)
+    return write_article(brief, notes)
