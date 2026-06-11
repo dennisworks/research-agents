@@ -39,17 +39,25 @@ def _text_of(content) -> str:
     )
 
 
-def research_topic(brief: str) -> str:
+def research_topic(brief: str, current_article: str | None = None) -> str:
     """Run the search agent against an editorial brief; return research notes."""
     search = TavilySearch(max_results=5)
     agent = create_agent(_make_llm(), [search], system_prompt=RESEARCH_PROMPT)
-    result = agent.invoke(
-        {"messages": [("user", f"Research the following editorial brief:\n\n{brief}")]}
-    )
+    request = f"Research the following editorial brief:\n\n{brief}"
+    if current_article:
+        request = (
+            "An existing published article is being revised. Here is its "
+            f"current content:\n\n{current_article}\n\n---\n\n"
+            "Research the following revision brief. Focus on what is new, "
+            "changed, or missing relative to the current article; also verify "
+            "its key claims still hold.\n\n"
+            f"{brief}"
+        )
+    result = agent.invoke({"messages": [("user", request)]})
     return _text_of(result["messages"][-1].content)
 
 
-def write_article(brief: str, notes: str) -> Article:
+def write_article(brief: str, notes: str, current_article: str | None = None) -> Article:
     """Turn research notes into a structured Article.
 
     Retried once: the structured-output call occasionally returns an
@@ -57,9 +65,20 @@ def write_article(brief: str, notes: str) -> Article:
     and a failed daily run means no article that day.
     """
     writer = _make_llm().with_structured_output(Article)
+    request = f"Editorial brief: {brief}\n\nResearch notes:\n\n{notes}"
+    if current_article:
+        request = (
+            "You are revising an existing article. Produce a complete, "
+            "self-contained replacement: keep the content that is still "
+            "accurate, and rework it per the brief and the new research "
+            "notes. Renumber citations to match the final sources list "
+            "(carry over sources from the current article that you still "
+            "rely on).\n\n"
+            f"Current article:\n\n{current_article}\n\n---\n\n{request}"
+        )
     messages = [
         ("system", WRITER_PROMPT),
-        ("user", f"Editorial brief: {brief}\n\nResearch notes:\n\n{notes}"),
+        ("user", request),
     ]
     try:
         return writer.invoke(messages)
@@ -67,6 +86,6 @@ def write_article(brief: str, notes: str) -> Article:
         return writer.invoke(messages)
 
 
-def run(brief: str) -> Article:
-    notes = research_topic(brief)
-    return write_article(brief, notes)
+def run(brief: str, current_article: str | None = None) -> Article:
+    notes = research_topic(brief, current_article)
+    return write_article(brief, notes, current_article)

@@ -17,6 +17,9 @@ class RemotePrompt:
     id: str
     text: str
     category: str | None
+    # Slug of an existing article this prompt revises; the run fetches the
+    # current content and the resulting draft replaces it on publish.
+    revises: str | None = None
 
 
 def _client_config() -> tuple[str, dict]:
@@ -40,7 +43,12 @@ def fetch(date: str) -> RemotePrompt | None:
             return None
         resp.raise_for_status()
         data = resp.json()
-        return RemotePrompt(id=data["id"], text=data["text"], category=data.get("category"))
+        return RemotePrompt(
+            id=data["id"],
+            text=data["text"],
+            category=data.get("category"),
+            revises=data.get("revises"),
+        )
     except Exception as e:
         print(f"[prompt] dworks queue unreachable ({e}); using local prompts", file=sys.stderr)
         return None
@@ -61,7 +69,12 @@ def claim_manual() -> RemotePrompt | None:
             return None
         resp.raise_for_status()
         data = resp.json()
-        return RemotePrompt(id=data["id"], text=data["text"], category=data.get("category"))
+        return RemotePrompt(
+            id=data["id"],
+            text=data["text"],
+            category=data.get("category"),
+            revises=data.get("revises"),
+        )
     except Exception as e:
         print(f"[prompt] manual claim failed ({e})", file=sys.stderr)
         return None

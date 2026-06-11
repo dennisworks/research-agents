@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 
 from research_agents import remote_prompts
 from research_agents.agent import run
-from research_agents.ingest import DuplicateDraft, post_draft
+from research_agents.ingest import DuplicateDraft, fetch_article, post_draft
 from research_agents.prompts import ResolvedPrompt, archive, resolve
 
 
@@ -80,8 +80,32 @@ def main() -> int:
                 file=sys.stderr,
             )
 
+    # A revision prompt names an existing article; fetch its current content
+    # so the agent builds on it instead of starting cold. Failing here leaves
+    # the prompt queued (consume only happens after a successful run).
+    current_article: str | None = None
+    revises = remote.revises if remote else None
+    if revises:
+        try:
+            item = fetch_article(revises)
+        except Exception as e:
+            print(f"[error] could not fetch article {revises}: {e}", file=sys.stderr)
+            return 1
+        if item is None:
+            print(f"[error] revises slug not found in dworks: {revises}", file=sys.stderr)
+            return 1
+        source_lines = "\n".join(
+            f"{i + 1}. {s['title']} — {s['url']}"
+            for i, s in enumerate(item.get("sources") or [])
+        )
+        current_article = (
+            f"# {item['title']}\n\n{item['summary']}\n\n{item['body']}"
+            + (f"\n\nSources:\n{source_lines}" if source_lines else "")
+        )
+        print(f"[revise] fetched current article for {revises}", file=sys.stderr)
+
     try:
-        article = run(brief)
+        article = run(brief, current_article)
     except Exception as e:
         print(f"[error] research run failed: {e}", file=sys.stderr)
         return 1
@@ -91,7 +115,13 @@ def main() -> int:
         return 0
 
     try:
-        result = post_draft(article, topic=_topic_label(brief), prompt=brief, category=category)
+        result = post_draft(
+            article,
+            topic=_topic_label(brief),
+            prompt=brief,
+            category=category,
+            revises=revises,
+        )
         print(f"[ingested] {article.slug} -> {result.get('id', 'ok')}", file=sys.stderr)
     except DuplicateDraft:
         print(f"[skipped] duplicate slug: {article.slug}", file=sys.stderr)
