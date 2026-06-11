@@ -1,6 +1,7 @@
 """Run the research agent.
 
     python main.py                 # daily mode: resolve prompt (dated -> queue -> default)
+    python main.py --manual        # run the prompt behind a pending "Run now" request, if any
     python main.py --topic "..."   # ad-hoc topic, ignores the prompts directory
     python main.py --dry-run       # print article JSON to stdout, no ingest
 
@@ -33,6 +34,11 @@ def main() -> int:
     load_dotenv()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--topic", help="ad-hoc topic; skips prompt resolution")
+    parser.add_argument(
+        "--manual",
+        action="store_true",
+        help='run the prompt behind a pending "Run now" request; exits quietly if none',
+    )
     parser.add_argument("--prompts-dir", default="prompts")
     parser.add_argument("--dry-run", action="store_true", help="print JSON instead of posting to dworks")
     args = parser.parse_args()
@@ -42,6 +48,18 @@ def main() -> int:
     if args.topic:
         brief, category = args.topic, None
         print(f"[prompt] ad-hoc --topic", file=sys.stderr)
+    elif args.manual:
+        # No local fallback here: a manual run only makes sense for the
+        # specific prompt that was requested.
+        remote = remote_prompts.claim_manual()
+        if remote is None:
+            print("[manual] no pending run request", file=sys.stderr)
+            return 0
+        brief, category = remote.text, remote.category
+        print(
+            f"[prompt] manual run {remote.id} (category={category or '-'})",
+            file=sys.stderr,
+        )
     else:
         # The dworks queue (entered at /admin/research/prompts) wins;
         # the local prompts/ directory is the offline fallback.

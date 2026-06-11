@@ -46,6 +46,27 @@ def fetch(date: str) -> RemotePrompt | None:
         return None
 
 
+def claim_manual() -> RemotePrompt | None:
+    """Claim the pending "Run now" request, or None (incl. on any error).
+    Claiming clears the request flag server-side, so a failed run is not
+    retried by the poller; the prompt stays queued until consume()."""
+    try:
+        base, headers = _client_config()
+        resp = httpx.post(
+            f"{base}/api/research/prompt/manual",
+            headers=headers,
+            timeout=15,
+        )
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        data = resp.json()
+        return RemotePrompt(id=data["id"], text=data["text"], category=data.get("category"))
+    except Exception as e:
+        print(f"[prompt] manual claim failed ({e})", file=sys.stderr)
+        return None
+
+
 def consume(prompt_id: str) -> None:
     """Mark a remote prompt used. Best-effort: a failure here means the prompt
     may run twice, which is preferable to crashing after a successful run."""
