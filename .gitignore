@@ -1,0 +1,14 @@
+.DS_Store
+*.local
+
+# Python
+.env
+.venv/
+__pycache__/
+*.pyc
+
+# consumed queue prompts are archived per-machine, not tracked
+prompts/used/
+
+# file-sink output (drafts written locally when no backend is configured)
+output/
