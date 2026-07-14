@@ -13,8 +13,8 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.11"
           enable-cache: true
@@ -32,8 +32,8 @@ jobs:
     env:
       TZ: UTC
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.11"
           enable-cache: true
@@ -50,8 +50,8 @@ jobs:
     # the shipping model still produces a schema-valid Article. Needs the repo
     # secrets ANTHROPIC_API_KEY and TAVILY_API_KEY.
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.11"
           enable-cache: true
