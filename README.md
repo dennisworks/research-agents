@@ -1,50 +1,111 @@
 # research-agents
 
-LangGraph + Tavily research agents that draft articles into the dworks
-editorial feed (`research_items` collection), where they're reviewed at
-`/admin/research` before publishing to the public JSON feed.
-
-## Pipeline
+A small, readable research-agent pipeline. Give it a topic; it searches the
+web and writes a cited Markdown article.
 
 ```
-prompts/ (dated → queue → default) → ReAct agent (Claude Opus 4.8 + Tavily search) → structured Article
-            → POST dworks /api/research/ingest (bearer token) → status: draft
-            → editorial review in dworks /admin/research → publish
-            → GET /api/research/feed (consumed by the Next.js site on Vercel)
+topic / brief
+  → ReAct agent (Claude + Tavily search) gathers notes with sources
+  → structured-output pass writes an Article (title, summary, body, tags, sources)
+  → output/<slug>.md            (or POST to your own backend)
 ```
 
-## Setup
+It's deliberately minimal — one search agent, a two-stage LLM pipeline,
+Pydantic-validated output — meant to be read and forked, not configured like a
+framework.
 
-1. `cp .env.example .env` and fill in:
-   - `ANTHROPIC_API_KEY` — console.anthropic.com
-   - `TAVILY_API_KEY` — app.tavily.com (free tier: 1,000 credits/month)
-   - `DWORKS_INGEST_TOKEN` — must match `RESEARCH_INGEST_TOKEN` on the VPS
-2. Open in VS Code → **"Reopen in Container"** (not Attach). `uv sync` runs on create.
-3. Test without touching dworks:
-   ```
-   uv run python main.py --topic "anything interesting" --dry-run
-   ```
+## Quick start
 
-## Running
-
-- `uv run python main.py` — daily mode: resolves the prompt (dated file → queue → default), posts the draft to dworks
-- `--topic "..."` — single ad-hoc topic, skips prompt resolution
-- `--dry-run` — print article JSON to stdout instead of posting
-
-Set tomorrow's prompt = add a file under `prompts/` and push (see
-`prompts/README.md` for the resolution rules, frontmatter `category:`, and
-the one-shot queue).
-
-## Production (VPS)
-
-Built with the root `Dockerfile`, run daily by cron:
+Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 
 ```
-docker run --rm --env-file /opt/research-agents/.env research-agents
+git clone https://github.com/dennisworks/research-agents
+cd research-agents
+uv sync
+cp .env.example .env        # then add ANTHROPIC_API_KEY and TAVILY_API_KEY
+
+uv run python main.py --topic "the state of WebGPU in 2026"
 ```
 
-The agents only need outbound HTTPS to `api.anthropic.com` and
-`api.tavily.com` — Tavily does all web crawling on its own infrastructure.
+That writes `output/<slug>.md` — Markdown with YAML frontmatter (title,
+summary, category, tags, sources). Add `--dry-run` to print the raw JSON
+instead of writing a file. See [`examples/`](examples/) for a full generated
+article.
+
+- `ANTHROPIC_API_KEY` — console.anthropic.com
+- `TAVILY_API_KEY` — app.tavily.com (free tier: 1,000 credits/month)
+
+## How it works
+
+`research_agents/agent.py` runs two stages against one brief:
+
+1. **Research** — a ReAct agent (`create_agent` + `TavilySearch`) runs several
+   searches and writes notes with a Sources list. Tavily does the crawling on
+   its own infrastructure; the agent only needs outbound HTTPS.
+2. **Write** — a second Claude call with `.with_structured_output(Article)`
+   turns those notes into a validated `Article`. It's retried once, because the
+   structured-output call occasionally returns an incomplete object.
+
+Both stages share one model (`RESEARCH_MODEL`, default `claude-opus-4-8`). The
+system prompts are plain constants at the top of `agent.py` — edit them to
+change voice, length, or citation style.
+
+## Prompts (unattended runs)
+
+Run `main.py` with no `--topic` and it resolves a brief from the `prompts/`
+directory: a dated file `prompts/YYYY-MM-DD.md`, then the oldest file in
+`prompts/queue/`, then `prompts/default.md`. Queue files are one-shot (archived
+to `prompts/used/` after a successful run). Frontmatter can set a `category`.
+See `prompts/README.md` for the full rules.
+
+## Publishing to a backend
+
+By default drafts are written to disk. To POST each finished draft to your own
+HTTP endpoint instead (a CMS, a review queue, a static-site pipeline), set:
+
+```
+PUBLISH_URL=https://your-backend.example.com
+PUBLISH_TOKEN=your-bearer-token
+```
+
+With those set, the run POSTs to `<PUBLISH_URL>/api/research/ingest` with
+`Authorization: Bearer <token>` and a JSON body:
+
+```jsonc
+{
+  "title": "...", "slug": "...", "summary": "...",
+  "body": "## markdown...", "tags": ["..."],
+  "sources": [{ "title": "...", "url": "..." }],
+  "topic": "short label",       // from the brief's first line
+  "category": "AI Agents",      // optional, from prompt frontmatter
+  "prompt": "the full brief",   // optional
+  "revises": "existing-slug"    // optional, revision runs only
+}
+```
+
+Expected responses: any `2xx` with `{"id": "..."}` on success; `409` if a
+draft with that slug already exists (skipped, not treated as an error). Two
+further optional endpoints enable a backend-hosted prompt queue and on-demand
+runs — see `research_agents/remote_prompts.py` and `scripts/manual-poll.sh`.
+This is the contract the author's own site implements; point your backend at
+it, or ignore it and use the file output.
+
+## Running on a schedule
+
+Build the image with the root `Dockerfile` and run it from cron:
+
+```
+docker run --rm --env-file .env \
+  -v "$(pwd)/output:/app/output" \
+  research-agents --topic "..."     # or no --topic to use prompts/
+```
+
+The container needs outbound HTTPS to `api.anthropic.com` and `api.tavily.com`
+(plus your `PUBLISH_URL` host, if set).
+
+## License
+
+MIT — see [LICENSE](LICENSE).
 
 ---
 

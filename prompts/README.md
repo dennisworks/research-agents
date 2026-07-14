@@ -18,7 +18,7 @@ Every run logs which prompt file it used.
 
 Markdown. The body is the editorial brief handed to the research agent.
 Optional YAML frontmatter sets the article's category (keep these to a small,
-stable set — they drive filtering on dennisworks.com):
+stable set — it's written to the draft's frontmatter / sent to your backend):
 
 ```markdown
 ---
@@ -30,10 +30,11 @@ this month and what defenders should change because of it.
 
 If `category` is omitted, the site falls back to "Research".
 
-## Owner workflow
+## Workflow
 
-Write a file, commit, push. The VPS cron pulls this repo before each daily
-run, so a prompt pushed before 06:00 UTC is picked up that morning.
+Drop a file in here (dated, queued, or edit `default.md`) and run the agent.
+If you schedule the run on another machine (e.g. a cron job that pulls this
+repo first), a prompt committed before the run is picked up that day.
 
 `prompts/used/` is gitignored — the archive lives on the machine that
-consumed the prompt (the VPS for cron runs).
+consumed the prompt.

@@ -60,10 +60,11 @@ ALLOWED_DOMAINS_WIDE=(
   # api.vercel.com            # Vercel REST API (read by MCP server + some plugin commands)
 )
 
-# Raw IPs that don't resolve via DNS — the dworks VPS over Tailscale, so the
-# agent can POST drafts to /api/research/ingest from inside the sandbox.
+# Raw IPs that don't resolve via public DNS — e.g. a private publish backend
+# reached over a VPN (Tailscale/WireGuard). Only needed if you set PUBLISH_URL
+# to a non-public address; empty by default.
 ALLOWED_IPS=(
-  100.93.140.39               # dworks VPS (Tailscale)
+  # 100.64.0.1                # example: publish backend over Tailscale
 )
 
 # --- Wait for eth0 to attach ----------------------------------------------

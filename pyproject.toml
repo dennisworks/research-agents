@@ -1,7 +1,7 @@
 [project]
 name = "research-agents"
 version = "0.1.0"
-description = "LangGraph + Tavily research agents that draft articles into the dworks editorial feed"
+description = "A minimal LangChain + Tavily research-agent pipeline: topic in, cited Markdown article out"
 requires-python = ">=3.11"
 dependencies = [
     "langchain>=0.3",

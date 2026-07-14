@@ -1,16 +1,15 @@
 """Two-stage pipeline per topic:
 
 1. A ReAct agent (Claude + Tavily search) gathers research notes with sources.
-2. A structured-output call turns the notes into an Article ready for ingest.
+2. A structured-output call turns the notes into a publishable Article.
 """
 
 from langchain.agents import create_agent
 from langchain_anthropic import ChatAnthropic
 from langchain_tavily import TavilySearch
 
+from . import config
 from .schemas import Article
-
-MODEL = "claude-opus-4-8"
 
 RESEARCH_PROMPT = """You are a meticulous research assistant. Use the search tool
 to investigate the topic you are given. Run several distinct searches covering
@@ -27,7 +26,7 @@ sources list."""
 
 
 def _make_llm() -> ChatAnthropic:
-    return ChatAnthropic(model=MODEL, max_tokens=8000, timeout=300)
+    return ChatAnthropic(model=config.model(), max_tokens=8000, timeout=300)
 
 
 def _text_of(content) -> str:

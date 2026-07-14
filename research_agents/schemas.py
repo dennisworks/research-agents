@@ -7,8 +7,8 @@ class Source(BaseModel):
 
 
 class Article(BaseModel):
-    """The shape posted to dworks POST /api/research/ingest — keep in sync
-    with the research_items collection schema there."""
+    """A finished draft. This is the shape written to disk (as frontmatter)
+    or POSTed to a publish backend — see research_agents/sinks.py."""
 
     title: str
     slug: str = Field(description="URL-safe kebab-case slug derived from the title")

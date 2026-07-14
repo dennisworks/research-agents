@@ -1,15 +1,22 @@
-"""Prompt queue hosted in dworks (entered via /admin/research/prompts).
+"""Optional prompt queue hosted by the publish backend.
 
-The daily run asks dworks for a prompt first; the local prompts/ directory
-(see prompts.py) is the offline fallback. Consumption is two-phase here too:
-resolve at run start, confirm via consume() only after the run succeeds.
+When a backend is configured (PUBLISH_URL + PUBLISH_TOKEN), the daily run can
+ask it for a prompt first, falling back to the local prompts/ directory (see
+prompts.py). Consumption is two-phase: resolve at run start, confirm via
+consume() only after the run succeeds. With no backend configured every
+function here is a no-op, so a file-only setup just uses local prompts.
+
+This targets the same endpoints as the dworks reference backend
+(`/api/research/prompt`, `.../prompt/manual`, `.../prompt/consume`); a backend
+that doesn't implement them simply 404s and the run falls back.
 """
 
-import os
 import sys
 from dataclasses import dataclass
 
 import httpx
+
+from . import config
 
 
 @dataclass
@@ -22,17 +29,22 @@ class RemotePrompt:
     revises: str | None = None
 
 
-def _client_config() -> tuple[str, dict]:
-    base = os.environ["DWORKS_API_URL"].rstrip("/")
-    headers = {"Authorization": f"Bearer {os.environ['DWORKS_INGEST_TOKEN']}"}
-    return base, headers
+def _client_config() -> tuple[str, dict] | None:
+    backend = config.publish_backend()
+    if backend is None:
+        return None
+    base, token = backend
+    return base, {"Authorization": f"Bearer {token}"}
 
 
 def fetch(date: str) -> RemotePrompt | None:
-    """The prompt dworks has queued for `date`, or None (incl. on any error —
-    a dworks outage must not stop the daily run)."""
+    """The prompt the backend has queued for `date`, or None (incl. on any
+    error — a backend outage must not stop the daily run)."""
+    cfg = _client_config()
+    if cfg is None:
+        return None
     try:
-        base, headers = _client_config()
+        base, headers = cfg
         resp = httpx.get(
             f"{base}/api/research/prompt",
             params={"date": date},
@@ -50,7 +62,7 @@ def fetch(date: str) -> RemotePrompt | None:
             revises=data.get("revises"),
         )
     except Exception as e:
-        print(f"[prompt] dworks queue unreachable ({e}); using local prompts", file=sys.stderr)
+        print(f"[prompt] remote queue unreachable ({e}); using local prompts", file=sys.stderr)
         return None
 
 
@@ -58,8 +70,11 @@ def claim_manual() -> RemotePrompt | None:
     """Claim the pending "Run now" request, or None (incl. on any error).
     Claiming clears the request flag server-side, so a failed run is not
     retried by the poller; the prompt stays queued until consume()."""
+    cfg = _client_config()
+    if cfg is None:
+        return None
     try:
-        base, headers = _client_config()
+        base, headers = cfg
         resp = httpx.post(
             f"{base}/api/research/prompt/manual",
             headers=headers,
@@ -83,8 +98,11 @@ def claim_manual() -> RemotePrompt | None:
 def consume(prompt_id: str) -> None:
     """Mark a remote prompt used. Best-effort: a failure here means the prompt
     may run twice, which is preferable to crashing after a successful run."""
+    cfg = _client_config()
+    if cfg is None:
+        return None
     try:
-        base, headers = _client_config()
+        base, headers = cfg
         httpx.post(
             f"{base}/api/research/prompt/consume",
             json={"id": prompt_id},
