@@ -1,11 +1,12 @@
 """Two-stage pipeline per topic:
 
-1. A ReAct agent (Claude + Tavily search) gathers research notes with sources.
+1. A ReAct agent (the configured chat model + Tavily search) gathers research notes.
 2. A structured-output call turns the notes into a publishable Article.
 """
 
 from langchain.agents import create_agent
-from langchain_anthropic import ChatAnthropic
+from langchain.chat_models import init_chat_model
+from langchain_core.language_models import BaseChatModel
 from langchain_tavily import TavilySearch
 
 from . import config
@@ -25,8 +26,20 @@ be Markdown with ## section headings and inline [n] citations matching the
 sources list."""
 
 
-def _make_llm() -> ChatAnthropic:
-    return ChatAnthropic(model=config.model(), max_tokens=8000, timeout=300)
+def _make_llm() -> BaseChatModel:
+    spec = config.model_spec()
+    try:
+        return init_chat_model(spec, **config.model_params())
+    except ImportError as e:
+        # init_chat_model imports the provider package lazily; turn the raw
+        # ModuleNotFound into an actionable "install this extra" message.
+        provider = spec.split(":", 1)[0] if ":" in spec else "the selected provider"
+        extra = config.PROVIDER_EXTRAS.get(provider, provider)
+        raise RuntimeError(
+            f"The provider package for '{spec}' isn't installed. "
+            f"Install it with `uv sync --extra {extra}` "
+            f"(or `pip install 'research-agents[{extra}]'`)."
+        ) from e
 
 
 def _text_of(content) -> str:

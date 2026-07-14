@@ -14,6 +14,13 @@ dependencies = [
     "python-dotenv>=1.0",
 ]
 
+[project.optional-dependencies]
+# Extra model providers (Anthropic is included by default). Install the one you
+# want, e.g. `uv sync --extra openai`; init_chat_model imports it lazily.
+openai = ["langchain-openai>=0.2"]
+google = ["langchain-google-genai>=2.0"]
+ollama = ["langchain-ollama>=0.2"]
+
 [dependency-groups]
 dev = [
     "pytest>=8",
