@@ -1,0 +1,63 @@
+name: CI
+
+# Runs automatically on every pull request to main (each push to the PR branch
+# re-runs it) and on merges to main. No manual triggering.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - run: uv sync
+      - name: Ruff lint
+        run: uv run ruff check .
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    # Match the production container's clock so timezone-sensitive prompt
+    # resolution (dated files in PROMPT_TZ) is exercised the same way.
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - run: uv sync
+      - name: Unit tests
+        run: uv run pytest -q
+
+  smoke:
+    name: smoke (live, non-blocking)
+    runs-on: ubuntu-latest
+    # Informational only — this job is NOT a required status check, so a
+    # transient network/model hiccup won't block a merge. It exercises the real
+    # Claude + Tavily pipeline end-to-end via --dry-run (no publish), verifying
+    # the shipping model still produces a schema-valid Article. Needs the repo
+    # secrets ANTHROPIC_API_KEY and TAVILY_API_KEY.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - run: uv sync
+      - name: Live dry-run
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+        run: uv run python main.py --topic "A concrete recent development in AI tooling or agent frameworks" --dry-run

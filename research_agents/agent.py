@@ -34,7 +34,9 @@ def _text_of(content) -> str:
     if isinstance(content, str):
         return content
     return "\n".join(
-        block.get("text", "") for block in content if isinstance(block, dict) and block.get("type") == "text"
+        block.get("text", "")
+        for block in content
+        if isinstance(block, dict) and block.get("type") == "text"
     )
 
 

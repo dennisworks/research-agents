@@ -81,7 +81,9 @@ def main() -> int:
         remote = remote_prompts.fetch(today) if has_backend else None
         if remote:
             brief, category = remote.text, remote.category
-            print(f"[prompt] remote queue {remote.id} (category={category or '-'})", file=sys.stderr)
+            print(
+                f"[prompt] remote queue {remote.id} (category={category or '-'})", file=sys.stderr
+            )
         else:
             resolved = resolve(Path(args.prompts_dir))
             brief, category = resolved.text, resolved.category
@@ -105,12 +107,10 @@ def main() -> int:
             print(f"[error] revises slug not found: {revises}", file=sys.stderr)
             return 1
         source_lines = "\n".join(
-            f"{i + 1}. {s['title']} — {s['url']}"
-            for i, s in enumerate(item.get("sources") or [])
+            f"{i + 1}. {s['title']} — {s['url']}" for i, s in enumerate(item.get("sources") or [])
         )
-        current_article = (
-            f"# {item['title']}\n\n{item['summary']}\n\n{item['body']}"
-            + (f"\n\nSources:\n{source_lines}" if source_lines else "")
+        current_article = f"# {item['title']}\n\n{item['summary']}\n\n{item['body']}" + (
+            f"\n\nSources:\n{source_lines}" if source_lines else ""
         )
         print(f"[revise] fetched current article for {revises}", file=sys.stderr)
 

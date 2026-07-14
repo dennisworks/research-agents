@@ -14,6 +14,26 @@ dependencies = [
     "python-dotenv>=1.0",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+]
+
 [tool.uv]
 # Plain script project — no build/install of the project itself, just the venv.
 package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# defaults (pyflakes + a slice of pycodestyle) plus import sorting
+extend-select = ["I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The project isn't installed (package = false), so put the repo root on the
+# path for `import research_agents`.
+pythonpath = ["."]
