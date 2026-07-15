@@ -26,19 +26,31 @@ be Markdown with ## section headings and inline [n] citations matching the
 sources list."""
 
 
+def _install_hint(spec: str) -> str:
+    """How to get the provider for `spec` installed, for the error below."""
+    if ":" not in spec:
+        return (
+            "Give RESEARCH_MODEL a provider prefix (e.g. 'openai:gpt-4.1') and install "
+            "that provider's extra — see the README 'Using a different model'."
+        )
+    provider = spec.split(":", 1)[0]
+    extra = config.PROVIDER_EXTRAS.get(provider)
+    if extra:
+        return f"Install it with `uv sync --extra {extra}` (or `pip install 'research-agents[{extra}]'`)."
+    pkg = "langchain-" + provider.replace("_", "-")
+    return f"Install the LangChain integration for '{provider}' (e.g. `pip install {pkg}`)."
+
+
 def _make_llm() -> BaseChatModel:
     spec = config.model_spec()
     try:
         return init_chat_model(spec, **config.model_params())
     except ImportError as e:
-        # init_chat_model imports the provider package lazily; turn the raw
-        # ModuleNotFound into an actionable "install this extra" message.
-        provider = spec.split(":", 1)[0] if ":" in spec else "the selected provider"
-        extra = config.PROVIDER_EXTRAS.get(provider, provider)
+        # init_chat_model imports the provider package lazily. Surface the real
+        # error (it may be an unrelated import failure) and add an install hint
+        # when we recognize the provider.
         raise RuntimeError(
-            f"The provider package for '{spec}' isn't installed. "
-            f"Install it with `uv sync --extra {extra}` "
-            f"(or `pip install 'research-agents[{extra}]'`)."
+            f"Could not load the model provider for '{spec}': {e}\n{_install_hint(spec)}"
         ) from e
 
 

@@ -5,7 +5,7 @@ web and writes a cited Markdown article.
 
 ```
 topic / brief
-  → ReAct agent (Claude + Tavily search) gathers notes with sources
+  → ReAct agent (LLM + Tavily search) gathers notes with sources
   → structured-output pass writes an Article (title, summary, body, tags, sources)
   → output/<slug>.md            (or POST to your own backend)
 ```
@@ -42,7 +42,7 @@ article.
 1. **Research** — a ReAct agent (`create_agent` + `TavilySearch`) runs several
    searches and writes notes with a Sources list. Tavily does the crawling on
    its own infrastructure; the agent only needs outbound HTTPS.
-2. **Write** — a second Claude call with `.with_structured_output(Article)`
+2. **Write** — a second call to the same model with `.with_structured_output(Article)`
    turns those notes into a validated `Article`. It's retried once, because the
    structured-output call occasionally returns an incomplete object.
 

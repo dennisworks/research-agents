@@ -14,7 +14,6 @@ DEFAULT_OUTPUT_DIR = "output"
 PROVIDER_EXTRAS = {
     "openai": "openai",
     "google_genai": "google",
-    "google_vertexai": "google",
     "ollama": "ollama",
 }
 
