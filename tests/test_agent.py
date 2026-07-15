@@ -35,3 +35,35 @@ def test_bare_model_name_error_suggests_prefix_not_bogus_extra(monkeypatch):
     msg = str(exc.value)
     assert "provider prefix" in msg
     assert "--extra" not in msg  # no nonsensical `--extra <phrase>` suggestion
+
+
+class _FakeWriter:
+    def invoke(self, messages):
+        from research_agents.schemas import Article
+
+        return Article(title="t", slug="t", summary="s", body="b", sources=[], tags=["x"])
+
+
+class _FakeLLM:
+    def __init__(self, calls):
+        self._calls = calls
+
+    def with_structured_output(self, schema, **kwargs):
+        self._calls.append(kwargs)
+        return _FakeWriter()
+
+
+def test_structured_method_passed_through_when_set(monkeypatch):
+    calls = []
+    monkeypatch.setattr(agent, "_make_llm", lambda: _FakeLLM(calls))
+    monkeypatch.setenv("RESEARCH_STRUCTURED_METHOD", "json_schema")
+    agent.write_article("brief", "notes")
+    assert calls == [{"method": "json_schema"}]
+
+
+def test_structured_method_omitted_when_unset(monkeypatch):
+    calls = []
+    monkeypatch.setattr(agent, "_make_llm", lambda: _FakeLLM(calls))
+    monkeypatch.delenv("RESEARCH_STRUCTURED_METHOD", raising=False)
+    agent.write_article("brief", "notes")
+    assert calls == [{}]

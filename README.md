@@ -68,6 +68,22 @@ output** (for the article) — the major hosted models do; smaller local models
 vary. Tune generation with `RESEARCH_MAX_TOKENS`, `RESEARCH_TIMEOUT`, and
 `RESEARCH_TEMPERATURE`.
 
+### OpenAI-compatible endpoints
+
+Point the `openai` provider at any OpenAI-compatible host (Groq, Together,
+OpenRouter, Fireworks, a local vLLM / LM Studio server) with `RESEARCH_BASE_URL`,
+and pass that host's key via `RESEARCH_API_KEY` so you don't have to overwrite
+`OPENAI_API_KEY`:
+
+```
+RESEARCH_MODEL=openai:llama-3.3-70b-versatile
+RESEARCH_BASE_URL=https://api.groq.com/openai/v1
+RESEARCH_API_KEY=gsk_…
+```
+
+If a model rejects the default structured-output mechanism, force one with
+`RESEARCH_STRUCTURED_METHOD` (`json_schema`, `json_mode`, or `function_calling`).
+
 ## Prompts (unattended runs)
 
 Run `main.py` with no `--topic` and it resolves a brief from the `prompts/`

@@ -90,7 +90,13 @@ def write_article(brief: str, notes: str, current_article: str | None = None) ->
     incomplete object (seen in production as Pydantic validation errors),
     and a failed daily run means no article that day.
     """
-    writer = _make_llm().with_structured_output(Article)
+    llm = _make_llm()
+    method = config.structured_method()
+    writer = (
+        llm.with_structured_output(Article, method=method)
+        if method
+        else llm.with_structured_output(Article)
+    )
     request = f"Editorial brief: {brief}\n\nResearch notes:\n\n{notes}"
     if current_article:
         request = (
