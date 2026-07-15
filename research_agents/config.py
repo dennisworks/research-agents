@@ -31,11 +31,11 @@ def model_spec() -> str:
 def model_params() -> dict:
     """Generation params passed to the model constructor.
 
-    max_tokens and timeout keep the original defaults. temperature, base_url,
-    and api_key are included only when their env vars are set — base_url points
-    an OpenAI-/Anthropic-compatible provider at a custom endpoint (Groq,
-    Together, OpenRouter, a local server), and api_key overrides the provider's
-    default key env var (e.g. a Groq key without touching OPENAI_API_KEY).
+    max_tokens and timeout keep the original defaults; temperature is added only
+    when set. base_url and api_key target an OpenAI-compatible endpoint (Groq,
+    Together, OpenRouter, a local server) and are only valid with the openai
+    provider — setting them with any other RESEARCH_MODEL raises, rather than
+    passing unsupported kwargs or silently hitting the wrong endpoint.
     """
     params: dict = {
         "max_tokens": int(os.environ.get("RESEARCH_MAX_TOKENS", "8000")),
@@ -44,12 +44,23 @@ def model_params() -> dict:
     temperature = os.environ.get("RESEARCH_TEMPERATURE")
     if temperature is not None:
         params["temperature"] = float(temperature)
+
     base_url = os.environ.get("RESEARCH_BASE_URL")
-    if base_url:
-        params["base_url"] = base_url
     api_key = os.environ.get("RESEARCH_API_KEY")
-    if api_key:
-        params["api_key"] = api_key
+    if base_url or api_key:
+        spec = model_spec()
+        provider = spec.split(":", 1)[0] if ":" in spec else ""
+        if provider != "openai":
+            raise RuntimeError(
+                "RESEARCH_BASE_URL / RESEARCH_API_KEY are only supported with the "
+                "openai provider — set RESEARCH_MODEL=openai:<model> (for an "
+                f"OpenAI-compatible host like Groq/Together/OpenRouter). "
+                f"Current RESEARCH_MODEL='{spec}'."
+            )
+        if base_url:
+            params["base_url"] = base_url
+        if api_key:
+            params["api_key"] = api_key
     return params
 
 

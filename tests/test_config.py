@@ -1,3 +1,5 @@
+import pytest
+
 from research_agents import config
 
 _BACKEND_KEYS = ("PUBLISH_URL", "PUBLISH_TOKEN", "DWORKS_API_URL", "DWORKS_INGEST_TOKEN")
@@ -36,12 +38,20 @@ def test_model_params_env_overrides(monkeypatch):
     assert params == {"max_tokens": 4096, "timeout": 120, "temperature": 0.2}
 
 
-def test_model_params_includes_endpoint_fields_when_set(monkeypatch):
+def test_model_params_includes_endpoint_fields_with_openai_provider(monkeypatch):
+    monkeypatch.setenv("RESEARCH_MODEL", "openai:llama-3.3-70b")
     monkeypatch.setenv("RESEARCH_BASE_URL", "https://api.groq.com/openai/v1")
     monkeypatch.setenv("RESEARCH_API_KEY", "gsk_secret")
     params = config.model_params()
     assert params["base_url"] == "https://api.groq.com/openai/v1"
     assert params["api_key"] == "gsk_secret"
+
+
+def test_endpoint_fields_require_the_openai_provider(monkeypatch):
+    monkeypatch.setenv("RESEARCH_MODEL", "anthropic:claude-opus-4-8")
+    monkeypatch.setenv("RESEARCH_BASE_URL", "https://api.groq.com/openai/v1")
+    with pytest.raises(RuntimeError, match="openai provider"):
+        config.model_params()
 
 
 def test_model_params_omits_endpoint_fields_when_unset(monkeypatch):
