@@ -31,8 +31,11 @@ def model_spec() -> str:
 def model_params() -> dict:
     """Generation params passed to the model constructor.
 
-    max_tokens and timeout keep the original defaults; temperature is included
-    only when RESEARCH_TEMPERATURE is set, since some models reject the field.
+    max_tokens and timeout keep the original defaults. temperature, base_url,
+    and api_key are included only when their env vars are set — base_url points
+    an OpenAI-/Anthropic-compatible provider at a custom endpoint (Groq,
+    Together, OpenRouter, a local server), and api_key overrides the provider's
+    default key env var (e.g. a Groq key without touching OPENAI_API_KEY).
     """
     params: dict = {
         "max_tokens": int(os.environ.get("RESEARCH_MAX_TOKENS", "8000")),
@@ -41,7 +44,20 @@ def model_params() -> dict:
     temperature = os.environ.get("RESEARCH_TEMPERATURE")
     if temperature is not None:
         params["temperature"] = float(temperature)
+    base_url = os.environ.get("RESEARCH_BASE_URL")
+    if base_url:
+        params["base_url"] = base_url
+    api_key = os.environ.get("RESEARCH_API_KEY")
+    if api_key:
+        params["api_key"] = api_key
     return params
+
+
+def structured_method() -> str | None:
+    """Optional method for with_structured_output ("json_schema", "json_mode",
+    "function_calling", ...). Some models/endpoints need a specific one; None
+    lets langchain pick the provider default."""
+    return os.environ.get("RESEARCH_STRUCTURED_METHOD") or None
 
 
 def publish_backend() -> tuple[str, str] | None:

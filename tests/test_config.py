@@ -36,6 +36,29 @@ def test_model_params_env_overrides(monkeypatch):
     assert params == {"max_tokens": 4096, "timeout": 120, "temperature": 0.2}
 
 
+def test_model_params_includes_endpoint_fields_when_set(monkeypatch):
+    monkeypatch.setenv("RESEARCH_BASE_URL", "https://api.groq.com/openai/v1")
+    monkeypatch.setenv("RESEARCH_API_KEY", "gsk_secret")
+    params = config.model_params()
+    assert params["base_url"] == "https://api.groq.com/openai/v1"
+    assert params["api_key"] == "gsk_secret"
+
+
+def test_model_params_omits_endpoint_fields_when_unset(monkeypatch):
+    for key in ("RESEARCH_BASE_URL", "RESEARCH_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    params = config.model_params()
+    assert "base_url" not in params
+    assert "api_key" not in params
+
+
+def test_structured_method(monkeypatch):
+    monkeypatch.delenv("RESEARCH_STRUCTURED_METHOD", raising=False)
+    assert config.structured_method() is None
+    monkeypatch.setenv("RESEARCH_STRUCTURED_METHOD", "json_schema")
+    assert config.structured_method() == "json_schema"
+
+
 def test_publish_backend_none_when_unset(monkeypatch):
     _clear_backend(monkeypatch)
     assert config.publish_backend() is None
