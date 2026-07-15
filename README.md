@@ -65,10 +65,10 @@ extra and set that provider's key:
 
 The model must support **tool calling** (for the search step) and **structured
 output** (for the article) — the major hosted models do; smaller local models
-vary. Verify a model before relying on it with `uv run python main.py
---check-model`, which makes two small calls and reports whether each capability
-works. Tune generation with `RESEARCH_MAX_TOKENS`, `RESEARCH_TIMEOUT`, and
-`RESEARCH_TEMPERATURE`.
+vary. Verify a model before relying on it with
+`uv run python main.py --check-model`, which makes two small calls and reports
+whether each capability works. Tune generation with `RESEARCH_MAX_TOKENS`,
+`RESEARCH_TIMEOUT`, and `RESEARCH_TEMPERATURE`.
 
 ### OpenAI-compatible endpoints
 
