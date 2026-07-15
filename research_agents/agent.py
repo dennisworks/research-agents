@@ -1,11 +1,12 @@
 """Two-stage pipeline per topic:
 
-1. A ReAct agent (Claude + Tavily search) gathers research notes with sources.
+1. A ReAct agent (the configured chat model + Tavily search) gathers research notes.
 2. A structured-output call turns the notes into a publishable Article.
 """
 
 from langchain.agents import create_agent
-from langchain_anthropic import ChatAnthropic
+from langchain.chat_models import init_chat_model
+from langchain_core.language_models import BaseChatModel
 from langchain_tavily import TavilySearch
 
 from . import config
@@ -25,8 +26,32 @@ be Markdown with ## section headings and inline [n] citations matching the
 sources list."""
 
 
-def _make_llm() -> ChatAnthropic:
-    return ChatAnthropic(model=config.model(), max_tokens=8000, timeout=300)
+def _install_hint(spec: str) -> str:
+    """How to get the provider for `spec` installed, for the error below."""
+    if ":" not in spec:
+        return (
+            "Give RESEARCH_MODEL a provider prefix (e.g. 'openai:gpt-4.1') and install "
+            "that provider's extra — see the README 'Using a different model'."
+        )
+    provider = spec.split(":", 1)[0]
+    extra = config.PROVIDER_EXTRAS.get(provider)
+    if extra:
+        return f"Install it with `uv sync --extra {extra}` (or `pip install 'research-agents[{extra}]'`)."
+    pkg = "langchain-" + provider.replace("_", "-")
+    return f"Install the LangChain integration for '{provider}' (e.g. `pip install {pkg}`)."
+
+
+def _make_llm() -> BaseChatModel:
+    spec = config.model_spec()
+    try:
+        return init_chat_model(spec, **config.model_params())
+    except ImportError as e:
+        # init_chat_model imports the provider package lazily. Surface the real
+        # error (it may be an unrelated import failure) and add an install hint
+        # when we recognize the provider.
+        raise RuntimeError(
+            f"Could not load the model provider for '{spec}': {e}\n{_install_hint(spec)}"
+        ) from e
 
 
 def _text_of(content) -> str:

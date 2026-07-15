@@ -5,7 +5,7 @@ web and writes a cited Markdown article.
 
 ```
 topic / brief
-  → ReAct agent (Claude + Tavily search) gathers notes with sources
+  → ReAct agent (LLM + Tavily search) gathers notes with sources
   → structured-output pass writes an Article (title, summary, body, tags, sources)
   → output/<slug>.md            (or POST to your own backend)
 ```
@@ -42,13 +42,31 @@ article.
 1. **Research** — a ReAct agent (`create_agent` + `TavilySearch`) runs several
    searches and writes notes with a Sources list. Tavily does the crawling on
    its own infrastructure; the agent only needs outbound HTTPS.
-2. **Write** — a second Claude call with `.with_structured_output(Article)`
+2. **Write** — a second call to the same model with `.with_structured_output(Article)`
    turns those notes into a validated `Article`. It's retried once, because the
    structured-output call occasionally returns an incomplete object.
 
-Both stages share one model (`RESEARCH_MODEL`, default `claude-opus-4-8`). The
-system prompts are plain constants at the top of `agent.py` — edit them to
-change voice, length, or citation style.
+Both stages share one model (`RESEARCH_MODEL`, default
+`anthropic:claude-opus-4-8`). The system prompts are plain constants at the top
+of `agent.py` — edit them to change voice, length, or citation style.
+
+## Using a different model
+
+`RESEARCH_MODEL` is a provider-prefixed spec passed to LangChain's
+`init_chat_model`, so any provider it supports works — just install the matching
+extra and set that provider's key:
+
+| Provider | `RESEARCH_MODEL` | Install | Key env var |
+| --- | --- | --- | --- |
+| Anthropic (default) | `anthropic:claude-opus-4-8` | included | `ANTHROPIC_API_KEY` |
+| OpenAI | `openai:gpt-4.1` | `uv sync --extra openai` | `OPENAI_API_KEY` |
+| Google Gemini | `google_genai:gemini-2.5-pro` | `uv sync --extra google` | `GOOGLE_API_KEY` |
+| Ollama (local) | `ollama:llama3.1` | `uv sync --extra ollama` | — |
+
+The model must support **tool calling** (for the search step) and **structured
+output** (for the article) — the major hosted models do; smaller local models
+vary. Tune generation with `RESEARCH_MAX_TOKENS`, `RESEARCH_TIMEOUT`, and
+`RESEARCH_TEMPERATURE`.
 
 ## Prompts (unattended runs)
 

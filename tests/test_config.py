@@ -8,14 +8,32 @@ def _clear_backend(monkeypatch):
         monkeypatch.delenv(key, raising=False)
 
 
-def test_model_defaults(monkeypatch):
+def test_model_spec_defaults_to_provider_prefixed_anthropic(monkeypatch):
     monkeypatch.delenv("RESEARCH_MODEL", raising=False)
-    assert config.model() == config.DEFAULT_MODEL
+    assert config.model_spec() == config.DEFAULT_MODEL
+    assert config.DEFAULT_MODEL.startswith("anthropic:")
 
 
-def test_model_override(monkeypatch):
-    monkeypatch.setenv("RESEARCH_MODEL", "claude-sonnet-4-6")
-    assert config.model() == "claude-sonnet-4-6"
+def test_model_spec_override(monkeypatch):
+    monkeypatch.setenv("RESEARCH_MODEL", "openai:gpt-4.1")
+    assert config.model_spec() == "openai:gpt-4.1"
+
+
+def test_model_params_defaults(monkeypatch):
+    for key in ("RESEARCH_MAX_TOKENS", "RESEARCH_TIMEOUT", "RESEARCH_TEMPERATURE"):
+        monkeypatch.delenv(key, raising=False)
+    params = config.model_params()
+    assert params == {"max_tokens": 8000, "timeout": 300}
+    # temperature omitted unless explicitly set (some models reject it)
+    assert "temperature" not in params
+
+
+def test_model_params_env_overrides(monkeypatch):
+    monkeypatch.setenv("RESEARCH_MAX_TOKENS", "4096")
+    monkeypatch.setenv("RESEARCH_TIMEOUT", "120")
+    monkeypatch.setenv("RESEARCH_TEMPERATURE", "0.2")
+    params = config.model_params()
+    assert params == {"max_tokens": 4096, "timeout": 120, "temperature": 0.2}
 
 
 def test_publish_backend_none_when_unset(monkeypatch):
