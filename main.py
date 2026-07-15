@@ -4,6 +4,7 @@
     python main.py --topic "..."   # ad-hoc topic, ignores the prompts directory
     python main.py --dry-run       # print article JSON to stdout, don't publish
     python main.py --manual        # backend only: run the prompt behind a "Run now" request
+    python main.py --check-model   # verify the model supports tool calling + structured output
 
 By default a finished draft is written to ./output/<slug>.md. Set
 PUBLISH_URL + PUBLISH_TOKEN to POST it to an HTTP backend instead (see the
@@ -21,7 +22,7 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 from research_agents import config, remote_prompts
-from research_agents.agent import run
+from research_agents.agent import probe_model, run
 from research_agents.prompts import ResolvedPrompt, archive, resolve
 from research_agents.sinks import DuplicateDraft, get_sink
 
@@ -30,6 +31,23 @@ def _topic_label(text: str) -> str:
     """Short human label for the article list, from the brief's first line."""
     first = text.strip().splitlines()[0]
     return first[:80]
+
+
+def _run_model_check() -> int:
+    """Report whether the configured model supports the pipeline's capabilities."""
+    try:
+        results = probe_model()
+    except Exception as e:
+        print(f"[check-model] could not build the model: {e}", file=sys.stderr)
+        return 1
+    print(f"[check-model] {results['model']}", file=sys.stderr)
+    ok = True
+    for capability in ("tool_calling", "structured_output"):
+        passed, detail = results[capability]
+        ok = ok and passed
+        label = capability.replace("_", " ")
+        print(f"  {label}: {'PASS' if passed else 'FAIL'} — {detail}", file=sys.stderr)
+    return 0 if ok else 1
 
 
 def main() -> int:
@@ -48,7 +66,15 @@ def main() -> int:
         help="where file-sink drafts are written (ignored when a backend is set)",
     )
     parser.add_argument("--dry-run", action="store_true", help="print JSON instead of publishing")
+    parser.add_argument(
+        "--check-model",
+        action="store_true",
+        help="preflight: verify the model supports tool calling + structured output, then exit",
+    )
     args = parser.parse_args()
+
+    if args.check_model:
+        return _run_model_check()
 
     sink = get_sink(args.output_dir)
     has_backend = config.publish_backend() is not None

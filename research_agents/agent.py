@@ -7,7 +7,9 @@
 from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
+from langchain_core.tools import tool
 from langchain_tavily import TavilySearch
+from pydantic import BaseModel, Field
 
 from . import config
 from .schemas import Article
@@ -121,3 +123,62 @@ def write_article(brief: str, notes: str, current_article: str | None = None) ->
 def run(brief: str, current_article: str | None = None) -> Article:
     notes = research_topic(brief, current_article)
     return write_article(brief, notes, current_article)
+
+
+# --- Model capability probe (used by `main.py --check-model`) ----------------
+#
+# The pipeline needs two things from whatever model is configured: tool calling
+# (the research agent binds Tavily) and structured output (the writer emits an
+# Article). Not every provider/model supports both, so probe_model() makes two
+# small live calls to verify before a real run relies on them.
+
+
+class _ProbeSchema(BaseModel):
+    ok: bool = Field(description="always true")
+    label: str = Field(description="a short label")
+
+
+@tool
+def _probe_tool(value: str) -> str:
+    """A trivial tool the probe asks the model to call."""
+    return value
+
+
+def _probe_tool_calling(llm: BaseChatModel) -> tuple[bool, str]:
+    try:
+        resp = llm.bind_tools([_probe_tool]).invoke("Call the _probe_tool with value='ping'.")
+        calls = getattr(resp, "tool_calls", None) or []
+        return (
+            bool(calls),
+            f"{len(calls)} tool call(s)" if calls else "model returned no tool calls",
+        )
+    except Exception as e:
+        return (False, f"{type(e).__name__}: {e}")
+
+
+def _probe_structured_output(llm: BaseChatModel) -> tuple[bool, str]:
+    try:
+        method = config.structured_method()
+        structured = (
+            llm.with_structured_output(_ProbeSchema, method=method)
+            if method
+            else llm.with_structured_output(_ProbeSchema)
+        )
+        result = structured.invoke("Return ok=true and label='probe'.")
+        if isinstance(result, _ProbeSchema):
+            return (True, "returned a valid structured object")
+        return (False, f"unexpected result type: {type(result).__name__}")
+    except Exception as e:
+        return (False, f"{type(e).__name__}: {e}")
+
+
+def probe_model() -> dict:
+    """Preflight for the configured model: does it support tool calling +
+    structured output? Makes two small live calls. Raises if the model can't be
+    built at all (e.g. a missing provider package)."""
+    llm = _make_llm()
+    return {
+        "model": config.model_spec(),
+        "tool_calling": _probe_tool_calling(llm),
+        "structured_output": _probe_structured_output(llm),
+    }
