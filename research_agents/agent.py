@@ -45,8 +45,18 @@ def _install_hint(spec: str) -> str:
 
 def _make_llm() -> BaseChatModel:
     spec = config.model_spec()
+    params = config.model_params()
+    cache_control = config.prompt_cache_control()
+    if cache_control is not None:
+        # Merge into model_kwargs so it rides on every request as a top-level
+        # `cache_control` (Anthropic auto-caches the last eligible block). Both
+        # the research agent and the writer go through here, so both cache.
+        params["model_kwargs"] = {
+            **params.get("model_kwargs", {}),
+            "cache_control": cache_control,
+        }
     try:
-        return init_chat_model(spec, **config.model_params())
+        return init_chat_model(spec, **params)
     except ImportError as e:
         # init_chat_model imports the provider package lazily. Surface the real
         # error (it may be an unrelated import failure) and add an install hint

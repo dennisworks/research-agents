@@ -64,6 +64,34 @@ def model_params() -> dict:
     return params
 
 
+def _provider(spec: str) -> str:
+    """Provider that init_chat_model resolves `spec` to.
+
+    An explicit prefix wins ("openai:gpt-4.1" -> "openai"); a bare "claude-*"
+    name infers anthropic, matching init_chat_model's own inference.
+    """
+    if ":" in spec:
+        return spec.split(":", 1)[0]
+    return "anthropic" if spec.startswith("claude") else ""
+
+
+def prompt_cache_control() -> dict | None:
+    """Anthropic prompt-cache breakpoint to apply to model requests, or None.
+
+    Returned as a top-level `cache_control` on the direct Anthropic API, which
+    auto-caches the last eligible block of each request. Across the multi-turn
+    research loop that means every step re-reads the cached system prompt and
+    prior tool results at ~0.1x input cost instead of paying full price every
+    turn. Only the Anthropic provider accepts the field, so it's gated on the
+    provider; set RESEARCH_PROMPT_CACHE=0 to turn it off.
+    """
+    if os.environ.get("RESEARCH_PROMPT_CACHE", "1") == "0":
+        return None
+    if _provider(model_spec()) != "anthropic":
+        return None
+    return {"type": "ephemeral"}
+
+
 def structured_method() -> str | None:
     """Optional method for with_structured_output ("json_schema", "json_mode",
     "function_calling", ...). Some models/endpoints need a specific one; None
