@@ -62,6 +62,31 @@ def test_model_params_omits_endpoint_fields_when_unset(monkeypatch):
     assert "api_key" not in params
 
 
+def test_prompt_cache_control_on_by_default_for_anthropic(monkeypatch):
+    monkeypatch.delenv("RESEARCH_MODEL", raising=False)  # default anthropic
+    monkeypatch.delenv("RESEARCH_PROMPT_CACHE", raising=False)
+    assert config.prompt_cache_control() == {"type": "ephemeral"}
+
+
+def test_prompt_cache_control_infers_anthropic_for_bare_claude(monkeypatch):
+    monkeypatch.setenv("RESEARCH_MODEL", "claude-opus-4-8")
+    monkeypatch.delenv("RESEARCH_PROMPT_CACHE", raising=False)
+    assert config.prompt_cache_control() == {"type": "ephemeral"}
+
+
+def test_prompt_cache_control_omitted_for_other_providers(monkeypatch):
+    # cache_control is Anthropic-only; other providers would reject the field.
+    monkeypatch.setenv("RESEARCH_MODEL", "openai:gpt-4.1")
+    monkeypatch.delenv("RESEARCH_PROMPT_CACHE", raising=False)
+    assert config.prompt_cache_control() is None
+
+
+def test_prompt_cache_control_disabled_by_env(monkeypatch):
+    monkeypatch.delenv("RESEARCH_MODEL", raising=False)  # default anthropic
+    monkeypatch.setenv("RESEARCH_PROMPT_CACHE", "0")
+    assert config.prompt_cache_control() is None
+
+
 def test_structured_method(monkeypatch):
     monkeypatch.delenv("RESEARCH_STRUCTURED_METHOD", raising=False)
     assert config.structured_method() is None
