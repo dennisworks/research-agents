@@ -5,8 +5,12 @@
 # claims the request via POST. flock prevents overlapping runs — a request
 # arriving mid-run is picked up by a later tick.
 #
-# Multi-backend: pass an env file and prompts dir to target a second backend;
-# a no-arg call is byte-for-byte the original single-backend behavior. Cron:
+# Multi-backend: pass an env file and prompts dir to target a second backend.
+# A no-arg call keeps the original single-backend operation — same .env,
+# prompts/, endpoints, and claim flow; the only differences from the previous
+# script are that the lock filename and the "pending run" log line now carry the
+# env-file name, so two backends can poll concurrently without sharing a lock.
+# Cron:
 #   * * * * * /path/to/scripts/manual-poll.sh >> /path/to/manual.log 2>&1
 #   * * * * * /path/to/scripts/manual-poll.sh .env.other prompts-other >> ... 2>&1
 #
