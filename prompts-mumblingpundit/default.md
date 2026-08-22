@@ -1,9 +1,4 @@
 ---
 category: Commentary
 ---
-Take a current, consequential story in technology, media, or culture and write
-an argued opinion piece about it — not a neutral summary. Stake a clear thesis
-in the first paragraph, defend it with specific facts, figures, and named
-sources you actually verify, and engage the strongest counterargument head-on
-before answering it. Punditry with evidence: a definite point of view, honestly
-sourced. Pick one concrete subject, not a roundup.
+Take an issue affecting the local music scene in Chicago, particularly on the north and northwest sides, and write an article. Topics could include things like club openings or closings, local city political and legal issues, general economic conditions, or notable acts performing locally. Pick one subject and go as indepth as possible, with an eye toward how the topic affects the average music customer.
