@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from langchain.agents import create_agent
 from langchain_tavily import TavilySearch
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from . import config
 from .llm import make_llm, structured_invoke, text_of
@@ -41,17 +41,19 @@ search surfaces them. Run several distinct searches from different angles — e.
 "live music venues in <region>", genre-specific clubs (jazz, rock, folk, metal),
 local alt-weekly and events-calendar listings, and "concerts this month
 <region>". Prefer venues that are currently operating and regularly program live
-music. Then write research notes: for each venue list its name, city (and the
-neighborhood when known), website or calendar URL, the genres it tends to host,
-and the source URL where you found it. Only include real venues supported by the
-search results, and only ones inside the region."""
+music. Then write research notes: for each venue list its name, the city or town
+it is in (put any neighborhood or district detail in a short note, not the city),
+website or calendar URL, the genres it tends to host, and the source URL where
+you found it. Only include real venues supported by the search results, and only
+ones inside the region."""
 
 VENUE_EXTRACT_PROMPT = """You turn venue research notes into a structured venue
 list. The request states the target region — include ONLY venues physically
 located within it, and drop any venue outside that region even if it appears in
-the notes. Do not invent venues or URLs beyond what the notes contain. Every
-venue must carry a source_url drawn from the notes. Drop anything you cannot
-ground in the notes."""
+the notes. Keep `city` as the city or town; put neighborhood/district detail in
+`notes`, not in `city`. Do not invent venues or URLs beyond what the notes
+contain. Every venue must carry a source_url drawn from the notes. Drop anything
+you cannot ground in the notes."""
 
 SHOW_RESEARCH_PROMPT = """You are a live-music listings researcher. You are given
 a region and a set of venues. Use the search tool to find upcoming, scheduled
@@ -149,17 +151,39 @@ def run(region: str, venues: list[Venue] | None = None) -> tuple[VenueList | Non
 def _load_venues(path: str) -> list[Venue]:
     """Load a curated venue list to run against instead of discovering.
 
-    Accepts either a VenueList dump ({"region", "venues": [...]} — exactly what
-    --venues-only prints) or a bare list of venue objects. Bootstrap flow: run
-    --venues-only for a region, prune the output to the venues you want, then
+    Accepts either a VenueList dump ({"region": ..., "venues": [...]} — exactly
+    what --venues-only prints) or a bare list of venue objects. Bootstrap flow:
+    run --venues-only for a region, prune the output to the venues you want, then
     pass that file back here to pin the run to those venues.
+
+    Raises ValueError with a readable message on any bad input (missing/unreadable
+    file, invalid JSON, wrong shape, or a malformed venue) so the CLI can report
+    it cleanly instead of dumping a traceback.
     """
     import json
     from pathlib import Path
 
-    data = json.loads(Path(path).read_text())
-    raw = data["venues"] if isinstance(data, dict) else data
-    return [Venue.model_validate(v) for v in raw]
+    try:
+        data = json.loads(Path(path).read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        raise ValueError(f"could not read venues file {path!r}: {e}") from e
+
+    if isinstance(data, dict):
+        raw = data.get("venues")
+    elif isinstance(data, list):
+        raw = data
+    else:
+        raw = None
+    if not isinstance(raw, list):
+        raise ValueError(
+            f"venues file {path!r} must be a VenueList dump "
+            '({"region": ..., "venues": [...]}) or a list of venue objects'
+        )
+
+    try:
+        return [Venue.model_validate(v) for v in raw]
+    except ValidationError as e:
+        raise ValueError(f"invalid venue in {path!r}: {e}") from e
 
 
 def main() -> int:
@@ -209,7 +233,14 @@ def main() -> int:
         print(venues.model_dump_json(indent=2))
         return 0
 
-    pinned = _load_venues(args.venues) if args.venues else None
+    pinned = None
+    if args.venues:
+        try:
+            pinned = _load_venues(args.venues)
+        except ValueError as e:
+            print(f"[error] {e}", file=sys.stderr)
+            return 1
+
     discovered, shows = run(args.region, venues=pinned)
     venue_count = (
         len(pinned) if pinned is not None else (len(discovered.venues) if discovered else 0)
