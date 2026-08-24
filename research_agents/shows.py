@@ -34,18 +34,24 @@ from .shows_schemas import ShowList, Venue, VenueList
 
 VENUE_RESEARCH_PROMPT = """You are a local live-music researcher. Use the search
 tool to find music venues and clubs that host live shows in the region you are
-given. Run several distinct searches from different angles — e.g. "live music
-venues in <region>", genre-specific clubs (jazz, rock, folk, metal), local
-alt-weekly and events-calendar listings, and "concerts this month <region>".
-Prefer venues that are currently operating and regularly program live music.
-Then write research notes: for each venue list its name, city, website or
-calendar URL, the genres it tends to host, and the source URL where you found
-it. Only include real venues supported by the search results."""
+given. Treat the region as a strict geographic boundary: it may name a city, a
+side of a city, or a specific set of neighborhoods, and you should only look for
+venues physically located inside it — ignore venues outside it even when a
+search surfaces them. Run several distinct searches from different angles — e.g.
+"live music venues in <region>", genre-specific clubs (jazz, rock, folk, metal),
+local alt-weekly and events-calendar listings, and "concerts this month
+<region>". Prefer venues that are currently operating and regularly program live
+music. Then write research notes: for each venue list its name, city (and the
+neighborhood when known), website or calendar URL, the genres it tends to host,
+and the source URL where you found it. Only include real venues supported by the
+search results, and only ones inside the region."""
 
 VENUE_EXTRACT_PROMPT = """You turn venue research notes into a structured venue
-list. Do not invent venues or URLs beyond what the notes contain. Every venue
-must carry a source_url drawn from the notes. Drop anything you cannot ground in
-the notes."""
+list. The request states the target region — include ONLY venues physically
+located within it, and drop any venue outside that region even if it appears in
+the notes. Do not invent venues or URLs beyond what the notes contain. Every
+venue must carry a source_url drawn from the notes. Drop anything you cannot
+ground in the notes."""
 
 SHOW_RESEARCH_PROMPT = """You are a live-music listings researcher. You are given
 a region and a set of venues. Use the search tool to find upcoming, scheduled
@@ -140,6 +146,22 @@ def run(region: str, venues: list[Venue] | None = None) -> tuple[VenueList | Non
     return discovered, shows
 
 
+def _load_venues(path: str) -> list[Venue]:
+    """Load a curated venue list to run against instead of discovering.
+
+    Accepts either a VenueList dump ({"region", "venues": [...]} — exactly what
+    --venues-only prints) or a bare list of venue objects. Bootstrap flow: run
+    --venues-only for a region, prune the output to the venues you want, then
+    pass that file back here to pin the run to those venues.
+    """
+    import json
+    from pathlib import Path
+
+    data = json.loads(Path(path).read_text())
+    raw = data["venues"] if isinstance(data, dict) else data
+    return [Venue.model_validate(v) for v in raw]
+
+
 def main() -> int:
     """Ad-hoc runner: research venues + shows for a region, then publish.
 
@@ -160,10 +182,19 @@ def main() -> int:
     load_dotenv()
     parser = argparse.ArgumentParser(description="Research venues + shows for a region.")
     parser.add_argument("--region", required=True, help='e.g. "Austin, TX"')
-    parser.add_argument(
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument(
         "--venues-only",
         action="store_true",
         help="discover venues and stop (skip show gathering)",
+    )
+    source.add_argument(
+        "--venues",
+        metavar="PATH",
+        help=(
+            "run against a curated venue list (JSON as printed by --venues-only, "
+            "pruned to the venues you want); skips discovery"
+        ),
     )
     parser.add_argument(
         "--dry-run",
@@ -178,19 +209,26 @@ def main() -> int:
         print(venues.model_dump_json(indent=2))
         return 0
 
-    discovered, shows = run(args.region)
+    pinned = _load_venues(args.venues) if args.venues else None
+    discovered, shows = run(args.region, venues=pinned)
+    venue_count = (
+        len(pinned) if pinned is not None else (len(discovered.venues) if discovered else 0)
+    )
     print(
-        f"[shows] gathered {len(shows.shows)} show(s) across "
-        f"{len(discovered.venues) if discovered else 0} venue(s)",
+        f"[shows] gathered {len(shows.shows)} show(s) across {venue_count} venue(s)"
+        + (" (curated list)" if pinned is not None else ""),
         file=sys.stderr,
     )
 
     sink = None if args.dry_run else get_show_sink()
     if sink is None:
-        out = {
-            "venues": discovered.model_dump() if discovered else None,
-            "shows": shows.model_dump(),
-        }
+        if discovered is not None:
+            venues_out = discovered.model_dump()
+        elif pinned is not None:
+            venues_out = VenueList(region=args.region, venues=pinned).model_dump()
+        else:
+            venues_out = None
+        out = {"venues": venues_out, "shows": shows.model_dump()}
         print(json.dumps(out, indent=2))
         return 0
 

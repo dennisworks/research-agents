@@ -168,3 +168,25 @@ def test_show_date_keeps_iso_and_drops_freeform():
     assert Show(date="2026-08-28", **base).date == "2026-08-28"
     assert Show(date="Friday, August 28", **base).date is None
     assert Show(date=None, **base).date is None
+
+
+# --- _load_venues: curated-list loader ----------------------------------------
+
+
+def test_load_venues_reads_venuelist_dump(tmp_path):
+    p = tmp_path / "venues.json"
+    p.write_text(
+        VenueList(
+            region="Chicago, IL",
+            venues=[Venue(name="Metro", city="Chicago", source_url="https://x")],
+        ).model_dump_json()
+    )
+    loaded = shows._load_venues(str(p))
+    assert [v.name for v in loaded] == ["Metro"]
+
+
+def test_load_venues_reads_bare_list(tmp_path):
+    p = tmp_path / "venues.json"
+    p.write_text('[{"name": "Metro", "city": "Chicago", "source_url": "https://x"}]')
+    loaded = shows._load_venues(str(p))
+    assert loaded[0].city == "Chicago"
