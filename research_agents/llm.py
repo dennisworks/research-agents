@@ -8,6 +8,7 @@ them without importing another graph's internals.
 
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
+from pydantic import BaseModel, ValidationError
 
 from . import config
 
@@ -62,3 +63,30 @@ def text_of(content) -> str:
         for block in content
         if isinstance(block, dict) and block.get("type") == "text"
     )
+
+
+def structured_invoke(
+    llm: BaseChatModel,
+    schema: type[BaseModel],
+    messages,
+    *,
+    method: str | None = None,
+) -> BaseModel:
+    """Structured-output call with a single retry on a malformed result.
+
+    The structured-output call occasionally returns an incomplete object,
+    which surfaces as a Pydantic ValidationError; one retry reliably recovers
+    it, and a failed run means no output that cycle. Transport/provider errors
+    (auth, rate limits, network, bad request) are NOT retried — replaying them
+    just doubles cost/load and hides the original failure. Shared so every
+    graph (articles + shows) gets the same behavior.
+    """
+    structured = (
+        llm.with_structured_output(schema, method=method)
+        if method
+        else llm.with_structured_output(schema)
+    )
+    try:
+        return structured.invoke(messages)
+    except ValidationError:
+        return structured.invoke(messages)

@@ -28,7 +28,7 @@ from langchain_tavily import TavilySearch
 from pydantic import BaseModel
 
 from . import config
-from .llm import make_llm, text_of
+from .llm import make_llm, structured_invoke, text_of
 from .shows_schemas import ShowList, Venue, VenueList
 
 VENUE_RESEARCH_PROMPT = """You are a local live-music researcher. Use the search
@@ -55,9 +55,11 @@ from. Run separate searches per venue where needed. Only include shows you can
 actually find with a supporting source; do not guess dates."""
 
 SHOW_EXTRACT_PROMPT = """You turn show research notes into a structured show list.
-Normalize dates to ISO 8601 (YYYY-MM-DD); if a date is unknown, leave it null
-rather than guessing. Do not invent shows, dates, or ticket links beyond what
-the notes contain. Every show must carry a source_url drawn from the notes."""
+The request lists the venues in scope; include ONLY shows taking place at one of
+those venues and drop any show whose venue is not in that list. Normalize dates
+to ISO 8601 (YYYY-MM-DD); if a date is unknown, leave it null rather than
+guessing. Do not invent shows, dates, or ticket links beyond what the notes
+contain. Every show must carry a source_url drawn from the notes."""
 
 
 def _research(system_prompt: str, request: str, *, max_results: int = 5) -> str:
@@ -71,21 +73,11 @@ def _research(system_prompt: str, request: str, *, max_results: int = 5) -> str:
 def _extract(schema: type[BaseModel], system_prompt: str, request: str) -> BaseModel:
     """Turn notes into a structured object.
 
-    Retried once: the structured-output call occasionally returns an incomplete
-    object (Pydantic validation error), and a failed run means no listings.
+    Retried once on a malformed structured result (see structured_invoke); a
+    failed run means no listings that cycle.
     """
-    llm = make_llm()
-    method = config.structured_method()
-    extractor = (
-        llm.with_structured_output(schema, method=method)
-        if method
-        else llm.with_structured_output(schema)
-    )
     messages = [("system", system_prompt), ("user", request)]
-    try:
-        return extractor.invoke(messages)
-    except Exception:
-        return extractor.invoke(messages)
+    return structured_invoke(make_llm(), schema, messages, method=config.structured_method())
 
 
 def discover_venues(region: str) -> VenueList:
@@ -109,12 +101,25 @@ def _format_venues(venues: list[Venue]) -> str:
 
 
 def gather_shows(region: str, venues: list[Venue]) -> ShowList:
-    """Research scheduled shows at the given venues and return them structured."""
+    """Research scheduled shows at the given venues and return them structured.
+
+    With no venues there is nothing to search, and running the researcher on an
+    empty venue set would let it surface shows for arbitrary venues — so
+    short-circuit to an empty result instead.
+    """
+    if not venues:
+        return ShowList(region=region, shows=[])
+    venue_block = _format_venues(venues)
     notes = _research(
         SHOW_RESEARCH_PROMPT,
-        f"Region: {region}\n\nFind upcoming shows at these venues:\n\n{_format_venues(venues)}",
+        f"Region: {region}\n\nFind upcoming shows at these venues:\n\n{venue_block}",
     )
-    request = f"Region: {region}\n\nShow research notes:\n\n{notes}"
+    # Carry the venue list into the extraction request too (not just the free-form
+    # notes), so the extractor can enforce that every show belongs to this set.
+    request = (
+        f"Region: {region}\n\nVenues in scope (include only shows at these):\n"
+        f"{venue_block}\n\nShow research notes:\n\n{notes}"
+    )
     result = _extract(ShowList, SHOW_EXTRACT_PROMPT, request)
     return result  # type: ignore[return-value]
 

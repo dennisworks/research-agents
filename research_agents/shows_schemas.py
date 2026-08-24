@@ -6,7 +6,9 @@ produces a VenueList (which clubs exist in a region) and a ShowList (what's
 playing at them).
 """
 
-from pydantic import BaseModel, Field
+from datetime import date as _date
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class Venue(BaseModel):
@@ -45,6 +47,20 @@ class Show(BaseModel):
     ticket_url: str | None = Field(default=None, description="link to buy/RSVP, if found")
     description: str | None = Field(default=None, description="support acts, genre, or other notes")
     source_url: str = Field(description="the listing page this show was drawn from")
+
+    @field_validator("date")
+    @classmethod
+    def _canonical_iso_date(cls, v: str | None) -> str | None:
+        """Guarantee `date` is a canonical YYYY-MM-DD or None. The model is
+        asked for ISO dates but `str` would accept anything (e.g. "Friday, Aug
+        28"); a non-ISO value is dropped to None so downstream dedupe on
+        (venue, date, artist) never keys off an ambiguous string."""
+        if v is None:
+            return None
+        try:
+            return _date.fromisoformat(v).isoformat()
+        except ValueError:
+            return None
 
 
 class ShowList(BaseModel):

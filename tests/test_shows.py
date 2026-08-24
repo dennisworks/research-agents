@@ -1,5 +1,5 @@
 from research_agents import shows
-from research_agents.shows_schemas import ShowList, Venue, VenueList
+from research_agents.shows_schemas import Show, ShowList, Venue, VenueList
 
 
 class _FakeExtractor:
@@ -95,3 +95,76 @@ def test_format_venues_is_readable():
     assert "The Continental" in line
     assert "Austin" in line
     assert "rock" in line
+
+
+# --- stage seams: stub _research / _extract and assert what flows through -----
+
+
+def test_discover_venues_wires_region_and_notes_through(monkeypatch):
+    seen = {}
+
+    def _fake_research(system_prompt, request, **kwargs):
+        seen["research_request"] = request
+        return "VENUE NOTES"
+
+    def _fake_extract(schema, system_prompt, request):
+        seen["extract"] = (schema, request)
+        return VenueList(region="Austin, TX", venues=[])
+
+    monkeypatch.setattr(shows, "_research", _fake_research)
+    monkeypatch.setattr(shows, "_extract", _fake_extract)
+
+    out = shows.discover_venues("Austin, TX")
+
+    assert "Austin, TX" in seen["research_request"]  # region reaches the researcher
+    assert seen["extract"][0] is VenueList  # extracts into the venue schema
+    assert "VENUE NOTES" in seen["extract"][1]  # research notes reach extraction
+    assert isinstance(out, VenueList)
+
+
+def test_gather_shows_puts_venue_context_in_research_and_extraction(monkeypatch):
+    seen = {}
+
+    def _fake_research(system_prompt, request, **kwargs):
+        seen["research_request"] = request
+        return "SHOW NOTES"
+
+    def _fake_extract(schema, system_prompt, request):
+        seen["extract"] = (schema, request)
+        return ShowList(region="Austin, TX", shows=[])
+
+    monkeypatch.setattr(shows, "_research", _fake_research)
+    monkeypatch.setattr(shows, "_extract", _fake_extract)
+
+    venues = [Venue(name="The Continental", city="Austin", source_url="http://s")]
+    shows.gather_shows("Austin, TX", venues)
+
+    assert "The Continental" in seen["research_request"]  # venues drive the search
+    assert seen["extract"][0] is ShowList
+    assert "The Continental" in seen["extract"][1]  # venue set constrains extraction
+    assert "SHOW NOTES" in seen["extract"][1]
+
+
+def test_gather_shows_short_circuits_on_empty_venues(monkeypatch):
+    called = {"research": False}
+
+    def _fail_research(*args, **kwargs):
+        called["research"] = True
+        return "x"
+
+    monkeypatch.setattr(shows, "_research", _fail_research)
+
+    out = shows.gather_shows("Austin, TX", [])
+
+    assert out.shows == []
+    assert called["research"] is False  # no LLM work when there's nothing to gather
+
+
+# --- date validator: only canonical ISO survives ------------------------------
+
+
+def test_show_date_keeps_iso_and_drops_freeform():
+    base = dict(artist="A", venue="V", source_url="http://s")
+    assert Show(date="2026-08-28", **base).date == "2026-08-28"
+    assert Show(date="Friday, August 28", **base).date is None
+    assert Show(date=None, **base).date is None

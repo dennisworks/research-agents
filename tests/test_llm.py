@@ -1,6 +1,7 @@
 import pytest
 
 from research_agents import llm
+from research_agents.shows_schemas import ShowList, VenueList
 
 
 def _raise_import_error(*args, **kwargs):
@@ -45,3 +46,56 @@ def test_text_of_handles_string_and_blocks():
         {"type": "text", "text": "world"},
     ]
     assert llm.text_of(blocks) == "hello\nworld"
+
+
+def _a_validation_error():
+    from pydantic import ValidationError
+
+    try:
+        VenueList(region=None, venues=[])  # region must be a str -> raises
+    except ValidationError as e:
+        return e
+    raise AssertionError("expected a ValidationError")
+
+
+class _ScriptedExtractor:
+    """Yields each item from `results` per invoke; raises it if it's an exception."""
+
+    def __init__(self, results):
+        self._results = list(results)
+
+    def invoke(self, messages):
+        item = self._results.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+
+class _ScriptedLLM:
+    def __init__(self, extractor):
+        self._extractor = extractor
+        self.methods = []
+
+    def with_structured_output(self, schema, **kwargs):
+        self.methods.append(kwargs.get("method"))
+        return self._extractor
+
+
+def test_structured_invoke_retries_once_on_validation_error():
+    ok = ShowList(region="X", shows=[])
+    model = _ScriptedLLM(_ScriptedExtractor([_a_validation_error(), ok]))
+    assert llm.structured_invoke(model, ShowList, [("user", "x")]) is ok
+
+
+def test_structured_invoke_does_not_retry_transport_errors():
+    model = _ScriptedLLM(
+        _ScriptedExtractor([RuntimeError("network"), ShowList(region="X", shows=[])])
+    )
+    with pytest.raises(RuntimeError):
+        llm.structured_invoke(model, ShowList, [("user", "x")])
+
+
+def test_structured_invoke_passes_method_through():
+    model = _ScriptedLLM(_ScriptedExtractor([ShowList(region="X", shows=[])]))
+    llm.structured_invoke(model, ShowList, [("user", "x")], method="json_schema")
+    assert model.methods == ["json_schema"]

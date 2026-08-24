@@ -11,7 +11,7 @@ from langchain_tavily import TavilySearch
 from pydantic import BaseModel, Field
 
 from . import config
-from .llm import make_llm, text_of
+from .llm import make_llm, structured_invoke, text_of
 from .schemas import Article
 
 RESEARCH_PROMPT = """You are a meticulous research assistant. Use the search tool
@@ -49,17 +49,9 @@ def research_topic(brief: str, current_article: str | None = None) -> str:
 def write_article(brief: str, notes: str, current_article: str | None = None) -> Article:
     """Turn research notes into a structured Article.
 
-    Retried once: the structured-output call occasionally returns an
-    incomplete object (seen in production as Pydantic validation errors),
-    and a failed daily run means no article that day.
+    Retried once on a malformed structured result (see structured_invoke); a
+    failed daily run means no article that day.
     """
-    llm = make_llm()
-    method = config.structured_method()
-    writer = (
-        llm.with_structured_output(Article, method=method)
-        if method
-        else llm.with_structured_output(Article)
-    )
     request = f"Editorial brief: {brief}\n\nResearch notes:\n\n{notes}"
     if current_article:
         request = (
@@ -75,10 +67,7 @@ def write_article(brief: str, notes: str, current_article: str | None = None) ->
         ("system", WRITER_PROMPT),
         ("user", request),
     ]
-    try:
-        return writer.invoke(messages)
-    except Exception:
-        return writer.invoke(messages)
+    return structured_invoke(make_llm(), Article, messages, method=config.structured_method())
 
 
 def run(brief: str, current_article: str | None = None) -> Article:
