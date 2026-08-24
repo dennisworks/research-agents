@@ -5,13 +5,13 @@
 """
 
 from langchain.agents import create_agent
-from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import tool
 from langchain_tavily import TavilySearch
 from pydantic import BaseModel, Field
 
 from . import config
+from .llm import make_llm, structured_invoke, text_of
 from .schemas import Article
 
 RESEARCH_PROMPT = """You are a meticulous research assistant. Use the search tool
@@ -28,59 +28,10 @@ be Markdown with ## section headings and inline [n] citations matching the
 sources list."""
 
 
-def _install_hint(spec: str) -> str:
-    """How to get the provider for `spec` installed, for the error below."""
-    if ":" not in spec:
-        return (
-            "Give RESEARCH_MODEL a provider prefix (e.g. 'openai:gpt-4.1') and install "
-            "that provider's extra — see the README 'Using a different model'."
-        )
-    provider = spec.split(":", 1)[0]
-    extra = config.PROVIDER_EXTRAS.get(provider)
-    if extra:
-        return f"Install it with `uv sync --extra {extra}` (or `pip install 'research-agents[{extra}]'`)."
-    pkg = "langchain-" + provider.replace("_", "-")
-    return f"Install the LangChain integration for '{provider}' (e.g. `pip install {pkg}`)."
-
-
-def _make_llm() -> BaseChatModel:
-    spec = config.model_spec()
-    params = config.model_params()
-    cache_control = config.prompt_cache_control()
-    if cache_control is not None:
-        # Merge into model_kwargs so it rides on every request as a top-level
-        # `cache_control` (Anthropic auto-caches the last eligible block). Both
-        # the research agent and the writer go through here, so both cache.
-        params["model_kwargs"] = {
-            **params.get("model_kwargs", {}),
-            "cache_control": cache_control,
-        }
-    try:
-        return init_chat_model(spec, **params)
-    except ImportError as e:
-        # init_chat_model imports the provider package lazily. Surface the real
-        # error (it may be an unrelated import failure) and add an install hint
-        # when we recognize the provider.
-        raise RuntimeError(
-            f"Could not load the model provider for '{spec}': {e}\n{_install_hint(spec)}"
-        ) from e
-
-
-def _text_of(content) -> str:
-    # Claude message content can be a string or a list of content blocks.
-    if isinstance(content, str):
-        return content
-    return "\n".join(
-        block.get("text", "")
-        for block in content
-        if isinstance(block, dict) and block.get("type") == "text"
-    )
-
-
 def research_topic(brief: str, current_article: str | None = None) -> str:
     """Run the search agent against an editorial brief; return research notes."""
     search = TavilySearch(max_results=5)
-    agent = create_agent(_make_llm(), [search], system_prompt=RESEARCH_PROMPT)
+    agent = create_agent(make_llm(), [search], system_prompt=RESEARCH_PROMPT)
     request = f"Research the following editorial brief:\n\n{brief}"
     if current_article:
         request = (
@@ -92,23 +43,15 @@ def research_topic(brief: str, current_article: str | None = None) -> str:
             f"{brief}"
         )
     result = agent.invoke({"messages": [("user", request)]})
-    return _text_of(result["messages"][-1].content)
+    return text_of(result["messages"][-1].content)
 
 
 def write_article(brief: str, notes: str, current_article: str | None = None) -> Article:
     """Turn research notes into a structured Article.
 
-    Retried once: the structured-output call occasionally returns an
-    incomplete object (seen in production as Pydantic validation errors),
-    and a failed daily run means no article that day.
+    Retried once on a malformed structured result (see structured_invoke); a
+    failed daily run means no article that day.
     """
-    llm = _make_llm()
-    method = config.structured_method()
-    writer = (
-        llm.with_structured_output(Article, method=method)
-        if method
-        else llm.with_structured_output(Article)
-    )
     request = f"Editorial brief: {brief}\n\nResearch notes:\n\n{notes}"
     if current_article:
         request = (
@@ -124,10 +67,7 @@ def write_article(brief: str, notes: str, current_article: str | None = None) ->
         ("system", WRITER_PROMPT),
         ("user", request),
     ]
-    try:
-        return writer.invoke(messages)
-    except Exception:
-        return writer.invoke(messages)
+    return structured_invoke(make_llm(), Article, messages, method=config.structured_method())
 
 
 def run(brief: str, current_article: str | None = None) -> Article:
@@ -186,7 +126,7 @@ def probe_model() -> dict:
     """Preflight for the configured model: does it support tool calling +
     structured output? Makes two small live calls. Raises if the model can't be
     built at all (e.g. a missing provider package)."""
-    llm = _make_llm()
+    llm = make_llm()
     return {
         "model": config.model_spec(),
         "tool_calling": _probe_tool_calling(llm),
