@@ -16,9 +16,10 @@ Both stages reuse the same model/config plumbing as the article pipeline
 (research_agents.llm + research_agents.config), so RESEARCH_MODEL, the prompt
 cache, and RESEARCH_STRUCTURED_METHOD all apply here unchanged.
 
-This module is graph-only: it returns structured objects and does not publish.
-A shows sink / backend contract (the equivalent of sinks.py for articles) is
-still to be designed — see the module TODO at the bottom.
+run() is pure — it returns structured objects and does not publish. Publishing
+is a separate step (see main() and shows_sinks.ShowWebhookSink → POST
+/api/shows/ingest), mirroring how the article pipeline keeps agent.run separate
+from sinks.
 """
 
 from __future__ import annotations
@@ -140,17 +141,21 @@ def run(region: str, venues: list[Venue] | None = None) -> tuple[VenueList | Non
 
 
 def main() -> int:
-    """Ad-hoc runner: research venues + shows for a region, print JSON.
+    """Ad-hoc runner: research venues + shows for a region, then publish.
 
-    Graph-only for now (no sink) — this prints results to stdout so the graph
-    can be exercised end to end from the CLI:
+    When a backend is configured (PUBLISH_URL + PUBLISH_TOKEN) the shows are
+    POSTed to it and the ingest counts are logged; otherwise (or with --dry-run)
+    the batch is printed as JSON so the graph can be exercised without a backend:
 
         python -m research_agents.shows --region "Austin, TX"
     """
     import argparse
+    import json
     import sys
 
     from dotenv import load_dotenv
+
+    from .shows_sinks import IngestError, get_show_sink
 
     load_dotenv()
     parser = argparse.ArgumentParser(description="Research venues + shows for a region.")
@@ -160,34 +165,42 @@ def main() -> int:
         action="store_true",
         help="discover venues and stop (skip show gathering)",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print the batch as JSON instead of publishing, even if a backend is set",
+    )
     args = parser.parse_args()
 
     if args.venues_only:
+        # Venue persistence is not part of phase 1 — venues only ever print.
         venues = discover_venues(args.region)
         print(venues.model_dump_json(indent=2))
         return 0
 
     discovered, shows = run(args.region)
-    out = {
-        "venues": discovered.model_dump() if discovered else None,
-        "shows": shows.model_dump(),
-    }
-    import json
-
-    print(json.dumps(out, indent=2))
     print(
-        f"[shows] {len(shows.shows)} show(s) across "
+        f"[shows] gathered {len(shows.shows)} show(s) across "
         f"{len(discovered.venues) if discovered else 0} venue(s)",
         file=sys.stderr,
     )
+
+    sink = None if args.dry_run else get_show_sink()
+    if sink is None:
+        out = {
+            "venues": discovered.model_dump() if discovered else None,
+            "shows": shows.model_dump(),
+        }
+        print(json.dumps(out, indent=2))
+        return 0
+
+    try:
+        counts = sink.publish(shows)
+    except IngestError as e:
+        print(f"[error] shows ingest failed: {e}", file=sys.stderr)
+        return 1
+    print(f"[published] {counts}", file=sys.stderr)
     return 0
-
-
-# TODO(sink): articles publish via research_agents.sinks (FileSink / WebhookSink
-# → POST /api/research/ingest). Shows are a different artifact and need their own
-# sink — likely POST /api/shows/ingest on the mumblingpundit backend, with
-# per-show upsert/dedupe keyed on (venue, date, artist) rather than slug. Add it
-# once the backend endpoint contract exists.
 
 
 if __name__ == "__main__":
