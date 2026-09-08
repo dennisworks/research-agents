@@ -54,12 +54,15 @@ def _run_model_check() -> int:
 def main() -> int:
     load_dotenv()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--topic", help="ad-hoc topic; skips prompt resolution")
-    parser.add_argument(
+    # These three pick the brief; they're mutually exclusive so an ambiguous
+    # combination fails fast instead of being silently resolved by order.
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--topic", help="ad-hoc topic; skips prompt resolution")
+    source.add_argument(
         "--brief-file",
         help="path to a Markdown brief file (optional `category` frontmatter); skips prompt resolution",
     )
-    parser.add_argument(
+    source.add_argument(
         "--manual",
         action="store_true",
         help='backend only: run the prompt behind a pending "Run now" request',
