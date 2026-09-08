@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-from research_agents.prompts import archive, resolve
+import pytest
+
+from research_agents.prompts import archive, parse_file, resolve
 
 
 def _write(path: Path, text: str) -> None:
@@ -72,3 +74,33 @@ def test_archive_is_noop_for_non_queue_prompt(tmp_path):
 
     r = resolve(tmp_path)
     assert archive(r) is None
+
+
+def test_parse_file_reads_body_and_category(tmp_path):
+    f = tmp_path / "brief.md"
+    _write(f, "---\ncategory: How-to\n---\nstep-by-step brief")
+
+    body, category = parse_file(f)
+    assert body == "step-by-step brief"
+    assert category == "How-to"
+
+
+def test_parse_file_without_frontmatter(tmp_path):
+    f = tmp_path / "brief.md"
+    _write(f, "just a brief")
+
+    body, category = parse_file(f)
+    assert body == "just a brief"
+    assert category is None
+
+
+def test_parse_file_missing_raises(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        parse_file(tmp_path / "nope.md")
+
+
+def test_parse_file_empty_raises(tmp_path):
+    f = tmp_path / "brief.md"
+    _write(f, "   \n")
+    with pytest.raises(ValueError):
+        parse_file(f)

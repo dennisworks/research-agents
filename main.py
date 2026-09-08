@@ -2,6 +2,7 @@
 
     python main.py                 # daily mode: resolve prompt (dated -> queue -> default)
     python main.py --topic "..."   # ad-hoc topic, ignores the prompts directory
+    python main.py --brief-file f  # read a full Markdown brief from a file (with frontmatter)
     python main.py --dry-run       # print article JSON to stdout, don't publish
     python main.py --manual        # backend only: run the prompt behind a "Run now" request
     python main.py --check-model   # verify the model supports tool calling + structured output
@@ -23,7 +24,7 @@ from dotenv import load_dotenv
 
 from research_agents import config, remote_prompts
 from research_agents.agent import probe_model, run
-from research_agents.prompts import ResolvedPrompt, archive, resolve
+from research_agents.prompts import ResolvedPrompt, archive, parse_file, resolve
 from research_agents.sinks import DuplicateDraft, get_sink
 
 
@@ -55,6 +56,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--topic", help="ad-hoc topic; skips prompt resolution")
     parser.add_argument(
+        "--brief-file",
+        help="path to a Markdown brief file (optional `category` frontmatter); skips prompt resolution",
+    )
+    parser.add_argument(
         "--manual",
         action="store_true",
         help='backend only: run the prompt behind a pending "Run now" request',
@@ -84,6 +89,15 @@ def main() -> int:
     if args.topic:
         brief, category = args.topic, None
         print("[prompt] ad-hoc --topic", file=sys.stderr)
+    elif args.brief_file:
+        try:
+            brief, category = parse_file(Path(args.brief_file))
+        except (FileNotFoundError, ValueError) as e:
+            print(f"[brief-file] {e}", file=sys.stderr)
+            return 2
+        print(
+            f"[prompt] brief-file {args.brief_file} (category={category or '-'})", file=sys.stderr
+        )
     elif args.manual:
         # A manual "Run now" request is a backend feature; there is no local
         # equivalent to fall back to.

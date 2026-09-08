@@ -32,6 +32,10 @@ summary, category, tags, sources). Add `--dry-run` to print the raw JSON
 instead of writing a file. See [`examples/`](examples/) for a full generated
 article.
 
+For a longer brief than fits on a command line, put it in a Markdown file
+(with optional `category:` frontmatter) and pass `--brief-file path.md` — it's
+treated like a `--topic` and also skips prompt resolution.
+
 - `ANTHROPIC_API_KEY` — console.anthropic.com
 - `TAVILY_API_KEY` — app.tavily.com (free tier: 1,000 credits/month)
 
@@ -135,6 +139,10 @@ docker run --rm --env-file .env \
   -v "$(pwd)/output:/app/output" \
   research-agents --topic "..."     # or no --topic to use prompts/
 ```
+
+Mount a different prompts directory (`-v "$(pwd)/prompts-howto:/app/prompts"`)
+to run a second persona, or mount a brief and pass
+`--brief-file /app/brief.md` to drive one run from a file.
 
 The container needs outbound HTTPS to `api.anthropic.com` and `api.tavily.com`
 (plus your `PUBLISH_URL` host, if set).
