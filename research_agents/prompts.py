@@ -44,6 +44,21 @@ def _parse(path: Path) -> tuple[str, str | None]:
     return body.strip(), category
 
 
+def parse_file(path: Path) -> tuple[str, str | None]:
+    """Parse a standalone Markdown brief file -> (body, category).
+
+    Same format as a prompt file (optional YAML frontmatter for `category`),
+    but for an explicit `--brief-file` rather than the dated/queue/default
+    resolution. Raises FileNotFoundError if missing, ValueError if empty.
+    """
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    text, category = _parse(path)
+    if not text:
+        raise ValueError(f"empty brief file: {path}")
+    return text, category
+
+
 def _load(path: Path, from_queue: bool) -> ResolvedPrompt | None:
     if not path.is_file():
         return None
