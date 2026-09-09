@@ -123,9 +123,11 @@ a non-URL `source_url`, nulls a non-URL `ticket_url`, and de-dupes within the ba
 1. Add a `ShowSink` (in `research_agents/sinks.py` or a sibling) that POSTs a `ShowList` to
    `/api/shows/ingest` with the bearer token, honoring your agreed response shape.
 2. Wire it into `shows.run()` (replace the `TODO(sink)`).
-3. Add a `.env.shows` + VPS crontab entry per `docs/mumblingpundit-backend-cron.md`
+3. Add a `.env.shows` + VPS crontab entry per `docs/shows-backend-cron.md`
    (reuses the same Docker image; new env file points `PUBLISH_URL` at mumblingpundit and
-   sets the token to its `CRON_SECRET`).
+   sets the token to its `CRON_SECRET`). Note: unlike the article backends (now
+   on-demand — see `docs/mumblingpundit-backend-cron.md`), shows is genuinely a
+   daily scheduled job.
 
 Ping back with answers to the open questions and I'll open the research-agents PR for the
 sink against whatever you ship.
