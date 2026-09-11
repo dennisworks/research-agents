@@ -112,3 +112,14 @@ def publish_backend() -> tuple[str, str] | None:
     if base and token:
         return base.rstrip("/"), token
     return None
+
+
+def publish_path() -> str:
+    """Ingest path on the publish backend (default `/api/research/ingest`).
+
+    Override with PUBLISH_PATH to post to a different queue on the same host —
+    e.g. `/api/howto/ingest` for a separate how-to backend. Always leading-slash
+    normalized.
+    """
+    path = os.environ.get("PUBLISH_PATH", "/api/research/ingest").strip()
+    return "/" + path.lstrip("/")

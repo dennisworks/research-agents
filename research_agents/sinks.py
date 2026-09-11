@@ -8,8 +8,10 @@ Two sinks, selected by `get_sink()`:
 - WebhookSink (optional): POST the draft to an HTTP endpoint with a bearer
   token, e.g. a CMS or an editorial review queue. Enabled by setting
   PUBLISH_URL + PUBLISH_TOKEN (see config.publish_backend). It posts to
-  `<PUBLISH_URL>/api/research/ingest`; the expected request/response contract
-  is documented in the README under "Publishing to a backend".
+  `<PUBLISH_URL>/api/research/ingest` by default; set PUBLISH_PATH to target a
+  different queue on the same host (e.g. `/api/howto/ingest`). The expected
+  request/response contract is documented in the README under "Publishing to a
+  backend".
 """
 
 from __future__ import annotations
@@ -68,8 +70,9 @@ class FileSink:
 class WebhookSink:
     """POST drafts to an HTTP backend (bearer auth)."""
 
-    def __init__(self, base_url: str, token: str):
+    def __init__(self, base_url: str, token: str, ingest_path: str = "/api/research/ingest"):
         self.base = base_url
+        self.ingest_path = ingest_path
         self.headers = {"Authorization": f"Bearer {token}"}
 
     def fetch_article(self, slug: str) -> dict | None:
@@ -106,7 +109,7 @@ class WebhookSink:
         if revises:
             payload["revises"] = revises
         resp = httpx.post(
-            f"{self.base}/api/research/ingest",
+            f"{self.base}{self.ingest_path}",
             json=payload,
             headers=self.headers,
             timeout=30,
@@ -121,5 +124,5 @@ def get_sink(output_dir: str) -> FileSink | WebhookSink:
     """WebhookSink when a publish backend is configured, else FileSink."""
     backend = config.publish_backend()
     if backend:
-        return WebhookSink(*backend)
+        return WebhookSink(*backend, ingest_path=config.publish_path())
     return FileSink(output_dir)
