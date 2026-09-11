@@ -109,7 +109,9 @@ PUBLISH_TOKEN=your-bearer-token
 ```
 
 With those set, the run POSTs to `<PUBLISH_URL>/api/research/ingest` with
-`Authorization: Bearer <token>` and a JSON body:
+`Authorization: Bearer <token>` and a JSON body. To target a different queue on
+the same host — e.g. a separate how-to backend — set `PUBLISH_PATH=/api/howto/ingest`
+(it defaults to `/api/research/ingest`):
 
 ```jsonc
 {

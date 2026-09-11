@@ -2,6 +2,7 @@ import httpx
 import pytest
 import yaml
 
+from research_agents import config
 from research_agents.schemas import Article, Source
 from research_agents.sinks import DuplicateDraft, FileSink, WebhookSink, get_sink
 
@@ -106,6 +107,36 @@ def test_webhook_publish_posts_expected_payload(monkeypatch):
     assert captured["json"]["topic"] == "webgpu"
     assert captured["json"]["prompt"] == "brief"
     assert captured["json"]["category"] == "Graphics"
+
+
+def test_webhook_publish_honors_custom_ingest_path(monkeypatch):
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["url"] = url
+        return _FakeResp(200, {"id": "x"})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    WebhookSink("http://backend", "tok", ingest_path="/api/howto/ingest").publish(
+        _article(), topic="webgpu"
+    )
+    assert captured["url"] == "http://backend/api/howto/ingest"
+
+
+def test_publish_path_default_and_override(monkeypatch):
+    monkeypatch.delenv("PUBLISH_PATH", raising=False)
+    assert config.publish_path() == "/api/research/ingest"
+    monkeypatch.setenv("PUBLISH_PATH", "api/howto/ingest")  # missing leading slash
+    assert config.publish_path() == "/api/howto/ingest"
+
+
+def test_get_sink_plumbs_publish_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("PUBLISH_URL", "http://backend")
+    monkeypatch.setenv("PUBLISH_TOKEN", "tok")
+    monkeypatch.setenv("PUBLISH_PATH", "/api/howto/ingest")
+    sink = get_sink(str(tmp_path))
+    assert isinstance(sink, WebhookSink)
+    assert sink.ingest_path == "/api/howto/ingest"
 
 
 def test_webhook_publish_omits_unset_optional_fields(monkeypatch):
