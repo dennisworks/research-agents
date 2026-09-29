@@ -67,6 +67,14 @@ if [ -n "$ac_url" ]; then
   [ -n "$ac_log" ] && run_log="$ac_log"
 fi
 
+# The console-provided path must never be able to block the actual run: if it
+# isn't writable, fall back to a local file (worst case /dev/null) so the worker
+# always executes and the queued prompt still gets claimed.
+if ! : >"$run_log" 2>/dev/null; then
+  run_log="/tmp/research-agents-manual-$(basename "$ENV_FILE").run.log"
+  : >"$run_log" 2>/dev/null || run_log=/dev/null
+fi
+
 # Run the worker, combined output to run_log so the console can stream it. Don't
 # let a non-zero exit abort under `set -e` — record it and report instead.
 code=0
