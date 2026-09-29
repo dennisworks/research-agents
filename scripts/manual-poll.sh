@@ -69,10 +69,12 @@ fi
 
 # The console-provided path must never be able to block the actual run: if it
 # isn't writable, fall back to a local file (worst case /dev/null) so the worker
-# always executes and the queued prompt still gets claimed.
-if ! : >"$run_log" 2>/dev/null; then
+# always executes and the queued prompt still gets claimed. `touch` (not `: >`,
+# a special built-in whose redirection error makes dash exit) so an unwritable
+# path is a clean non-zero, not a shell exit.
+if ! touch "$run_log" 2>/dev/null; then
   run_log="/tmp/research-agents-manual-$(basename "$ENV_FILE").run.log"
-  : >"$run_log" 2>/dev/null || run_log=/dev/null
+  touch "$run_log" 2>/dev/null || run_log=/dev/null
 fi
 
 # Run the worker, combined output to run_log so the console can stream it. Don't
